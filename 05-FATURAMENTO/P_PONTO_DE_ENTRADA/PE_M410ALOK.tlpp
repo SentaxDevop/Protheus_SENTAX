@@ -1,0 +1,38 @@
+#Include "PROTHEUS.CH"
+ 
+/*/{Protheus.doc} M410ALOK
+    Executado antes de iniciar a alteração, exclusão ou cópia de um Pedido de Venda.v
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 07/11/2023
+    @requester Moizés 
+    @consultancy Harpia
+    @site www.harpiaconsultoria.com
+    @see https://tdn.totvs.com/pages/releaseview.action?pageId=6784143
+/*/
+User Function M410ALOK()
+
+    Local lRet as Logical
+ 
+    lRet := .T.
+    
+    If SC5->C5_XSTAWMS == "E" .Or. SC5->C5_XSTAWMS == "O"
+        If !( __cUserID $ GetNewPar("ST_USRSC5","000000|000319|000359"))
+            If ALTERA   //Alteração
+                FWAlertWarning("[M410ALOK - 01] - Pedidos já enviados para o WMS não poderão sofrer alterações.", "SENTAX")
+            ElseIf !INCLUI .And. !ALTERA    //Exclusão
+                FWAlertWarning("[M410ALOK - 02] - Pedidos já enviados para o WMS não poderão sofrer exclusões.", "SENTAX")
+            //ElseIf INCLUI .And. IsInCallStack("A410COPIA")  //Cópia
+            //    MsgAlert("CÓPIA - Pedido já faturado.","ATENÇÃO")
+            EndIf
+
+            lRet := .F.
+
+        Else
+            lRet := FWAlertYesNo("Tem certeza que gostaria de "+IF(ALTERA,"ALTERAR", "EXCLUIR")+" um pedido já integrado com o WMS?", "[M410ALOK - 03]")
+        End
+
+    EndIf
+ 
+Return lRet

@@ -1,0 +1,274 @@
+#INCLUDE 'Protheus.ch'
+#INCLUDE "TBICONN.CH"
+#include "topconn.ch"
+#Include "Fileio.ch"
+#Include "TOTVS.ch"
+
+/*/{Protheus.doc} ATMK018
+    Schedule destinado aos processos automáticos do Call Center 
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 5/19/2025
+/*/
+User Function ATMK018(aPars)
+
+    Local cEnvUser  := "Administrador"
+    Local cEnvPass  := "S3nt@x2026"
+    Local cEnvMod   := "TMK"
+    Local cFunName  := "ATMK018"
+    Local aTables   :=  {"SUA", "SUB", "SUC", "SUD", "SB1", "SA1", "SUS", "SE4", "AC8", "SA4", "SU7"}
+
+    Private cNumSUA := ""
+
+	DEFAULT aPars   := {"01","020201"}
+
+	RpcClearenv()
+
+	RpcSetType( 3 )
+	RpcSetEnv( aPars[1], aPars[2], cEnvUser, cEnvPass, cEnvMod, cFunName, aTables)
+	//RpcSetEnv( aPars[1], aPars[2])
+
+    //Inclusão automática de SAC's
+    //ATMK018A()
+
+    //Inclusão automática de Atendimentos
+    ATMK018C()
+
+	RpcClearEnv()
+
+Return
+
+/*/{Protheus.doc} ATMK018A
+    Realiza a inclusão do Televendas
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 6/25/2025
+/*/
+Static Function ATMK018A()
+
+    Local cAliasSUA := GetNextAlias()
+
+    BeginSql Alias cAliasSUA
+                
+        SELECT 
+            R_E_C_N_O_ RECSUA
+        FROM 
+            %Table:SUA% SUA
+        WHERE SUA.%NOTDEL%
+            AND UA_FILIAL = %xFilial:SUA%
+            AND UA_XGERSAC = "S"
+    EndSql
+
+    If (cAliasSUA)->(!EOF())
+
+        Conout(" S T A R T - Inclusão automática de SAC's")
+
+        While (cAliasSUA)->(!EOF())
+
+            SUA->(DBGOTO((cAliasSUA)->RECSUA))
+
+            cNumSUA := SUA->UA_NUM
+
+            Conout("SAC do Atendimento nº " + cNumSUA + " será incluído!")
+
+            If ATMK018B()
+                Reclock("SUA",.F.)
+                    SUA->UA_XGERSAC = "F"
+                MsUnlock()
+            End
+
+            (cAliasSUA)->(DbSkip())
+        End
+
+        Conout(" F I N I S H - Rotina de Inclusão automática de SAC's finalizada")
+
+    End
+
+Return
+
+/*/{Protheus.doc} ATMK018B
+    Função auxiliar do ATMK018A
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 6/25/2025
+/*/
+Static Function ATMK018B()
+
+    Local aCabec       := {}
+    Local aItens       := {}
+    Local aLinha       := {}
+    Local nX           := 0
+    Local nY           := 0
+    Local cOperador    := "000001"
+    Local cClienteLoja := SUA->UA_CLIENTE + SUA->UA_LOJA
+    Local aErroAuto      := {}
+    Local nI       := 0
+    Local cMsg         := ""
+    Local lRet := .F.
+    
+    DEFAULT cRotina    := "1" //Indica as rotinas de atendimento. 1-Telemarketing 2- Televendas 3-TelecobranÃ§a
+    
+	Private lMSErroAuto    := .F. //Determina se houve algum tipo de erro durante a execucao do ExecAuto
+	Private lAutoErrNoFile := .T. //Habilita a gravacao de erro da rotina automatica
+	Private lMSHelpAuto    := .T. //Define se mostra ou não os erros na tela (T= Nao mostra; F=Mostra)
+                                        
+    Do Case
+        Case cRotina == "1"
+    
+            cContato := GetAdvFVal("AC8", "AC8_CODCON", FWxFilial("AC8") + Space(6) + "SA1" + cClienteLoja, 3)
+
+            If Empty(cContato)
+                Conout(" Contato não identificado para o Cliente/Loja: " + cClienteLoja)
+                cContato := "000001"
+            End
+    
+            For nY := 1 To 1
+                
+                aCabec := {}
+                aItens := {}
+
+                aadd(aCabec, {"UC_ENTIDAD", "SA1"              , Nil}) //Alias da Entidade vinculada ao Contato
+                aadd(aCabec, {"UC_CODCONT", cContato           , Nil}) //Código do Contato
+                aadd(aCabec, {"UC_CHAVE"  , cClienteLoja       , Nil}) //Código do Cliente e Loja vinculado ao Contato
+                aadd(aCabec, {"UC_OPERADO", cOperador          , Nil}) //Codigo do Operador
+                aadd(aCabec, {"UC_OPERACA", "1"                , Nil}) //1-Receptivo 2-Ativo
+                aadd(aCabec, {"UC_STATUS" , "2"                , Nil}) //1-Planejada 2-Pendente 3-Encerrada
+                aadd(aCabec, {"UC_TIPO"   , "000002"           , Nil})
+                aadd(aCabec, {"UC_PENDENT", dDataBase + 1      , Nil})
+                aadd(aCabec, {"UC_HRPEND" , TIME()             , Nil})
+                aadd(aCabec, {"UC_SETORDE", "00000000000000007", Nil})
+                aadd(aCabec, {"UC_SETORPA", "00000000000000015", Nil})
+                aadd(aCabec, {"UC_CAUSADO", "00000014"         , Nil})
+
+                For nX := 1 To 1
+                    aLinha := {}
+                    aadd(aLinha, {"UD_ITEM"   , StrZero(nX,2), Nil})
+                    aadd(aLinha, {"UD_ASSUNTO", "000005"     , Nil})
+                    aadd(aLinha, {"UD_SOLUCAO", "000001"     , Nil})
+                    aadd(aLinha, {"UD_OPERADO", "000441"     , Nil})
+                    aadd(aLinha, {"UD_STATUS" , "1"          , Nil}) //1-Pendente 2-Encerrada
+                    aadd(aItens, aLinha)
+                Next nX
+
+            Next nY
+            
+    EndCase
+           
+    TMKA271(aCabec,aItens,3,cRotina)
+
+    If !lMsErroAuto
+
+        Conout("SAC incluído com sucesso! " + If( M->UC_CODIGO <> NIL, "Nº " + M->UC_CODIGO,""))
+
+        Reclock("SUC",.F.)
+            SUC->UC_OPERADO := "000441" 
+        MsUnlock()
+
+        lRet := .T.
+
+    Else
+
+        aErroAuto := GetAutoGRLog()
+
+        For nI := 1 To Len(aErroAuto)
+            cMsg += aErroAuto[nI] + CRLF
+        Next
+
+        cMail    := GetMV("ST_MAILTI")
+        cAssunto := "Falha na inclusão automática do SAC do Atendimento nº " + cNumSUA
+
+        u_MailTo(cMail, cAssunto, "", "", cMsg, "")
+
+        CONOUT(cMsg)
+
+        //Mostraerro()
+        DisarmTransaction()
+
+        Break
+    Endif
+
+Return lRet
+
+/*/{Protheus.doc} ATMK018C
+    Realiza a inclusão do TeleAtendimento
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 6/25/2025
+/*/
+Static Function ATMK018C()
+
+    Local cAliasSC5 := GetNextAlias()
+
+    Conout(" S T A R T - Inclusão automática de Atendimentos")
+
+    BeginSql Alias cAliasSC5
+                
+        SELECT 
+            R_E_C_N_O_ RECSC5
+        FROM 
+            %Table:SC5% SC5
+        WHERE SC5.%NOTDEL%
+            //AND C5_FILIAL = %xFilial:SC5%
+            AND C5_XSUA = "S"
+        ORDER BY
+            C5_FILIAL, C5_NUM
+    EndSql
+
+    If (cAliasSC5)->(!EOF())
+
+        While (cAliasSC5)->(!EOF())
+
+            SC5->(DBGOTO((cAliasSC5)->RECSC5))
+
+            cFilAnt := SC5->C5_FILIAL
+
+            If ATMK018D()
+
+                Conout("Atendimento do Pedido de Venda nº " + SC5->C5_NUM + " será incluído!")
+
+                U_AFAT008(SC5->C5_NUM, !EMPTY(SC5->C5_X_PVSIM), Alltrim(SC5->C5_ORIGEM) = 'MSGEAI' .And. !EMPTY(SC5->C5_NUMEXT))
+            
+            Else
+
+                Reclock("SC5",.F.)
+                    SC5->C5_XSUA = "D"
+                MsUnlock()
+
+            End
+
+            (cAliasSC5)->(DbSkip())
+        End
+
+    End
+
+    Conout(" F I N I S H - Rotina de Inclusão automática de Atendimentos finalizada")
+
+Return
+
+Static Function ATMK018D()
+
+    Local cAliasSUA := GetNextAlias()
+    Local lRet      := .T.
+
+    BeginSql Alias cAliasSUA
+                
+        SELECT 
+            SUA.*
+        FROM 
+            %Table:SUA% SUA
+        WHERE SUA.%NOTDEL%
+            AND UA_FILIAL = %Exp:SC5->C5_FILIAL%
+            AND UA_NUMSC5 = %Exp:SC5->C5_NUM%
+    EndSql
+
+    If (cAliasSUA)->(!EOF())
+
+        lRet := .F.
+
+    End
+
+Return lRet

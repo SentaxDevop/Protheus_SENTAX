@@ -1,0 +1,32 @@
+/*/{Protheus.doc} CTBNFE
+    Function MaCtbNfe - Rotina de contabilização dos documentos de entrada off-line
+    Alteração da query de otimização
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 01/09/2023
+    @return array, Vetor contendo a nova query a ser considerada
+    @requester Kleber Moro
+    @consultancy Harpia
+    @site www.harpiaconsultoria.com
+/*/
+User Function CTBNFE()
+
+    Local aOptimize     as Array
+    Local nTamanhoArray as Numeric
+
+    aOptimize     := ParamIXB
+    nTamanhoArray := Len(aOptimize[1])
+    //aOptimize[1]  := aClone(aOptimize[1]) // Clausula SELECT feita pelo Usuario
+    //aOptimize[2]  := aClone(aOptimize[2]) // Clausula FROM feita pelo Usuarioa
+    //aOptimize[3]  := aClone(aOptimize[3]) // Clausula WHERE feita pelo Usuario
+
+    //Customização de remoção do campo, devido a erro 'Ambiguous column name 'A1_EST'' não simulado pela TOTVS no chamado 17848972
+    If aOptimize[1][194][1] == "A1_EST"
+
+        aDel(aOptimize[1],194)
+        aSize(aOptimize[1],nTamanhoArray-1)
+        
+    End
+
+Return (aOptimize) 

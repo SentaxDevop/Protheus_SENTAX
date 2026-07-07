@@ -1,0 +1,101 @@
+#INCLUDE "Protheus.ch"
+#INCLUDE "RPTDEF.CH"
+#INCLUDE "FWPrintSetup.ch" 
+
+/*/{Protheus.doc} AFAT012
+    Rotina de impressão de boletos FIN x FAT
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 1/6/2025
+/*/
+User Function AFAT012()
+  
+    Local cNomSerie   := "Serie da Nota Fiscal" as Character
+	Local cDocInicial := "Nota fiscal inicial"  as Character
+	Local cDocFinal   := "Nota fiscal final"    as Character
+	Local aPerg       := {}                     as Array
+	Local aParam   := {Space(Len(SerieNfId("SF2",2,"F2_SERIE"))),Space(Len(SF2->F2_DOC)),Space(Len(SF2->F2_DOC)),CtoD(""),CtoD("")} as Array
+
+    Private cSerie   := "" as Character
+    Private cNotaIni := "" as Character
+    Private cNotaFim := "" as Character
+
+    aadd(aPerg,{1,cNomSerie, aParam[01],"",".T.","",".T.",30,.F.})
+    aadd(aPerg,{1,cDocInicial,aParam[02],"",".T.","",".T.",30,.T.})
+    aadd(aPerg,{1,cDocFinal,aParam[03],"",".T.","",".T.",30,.T.})
+
+    lOK      := ParamBox(aPerg,"SPED - NFe",aParam,,,,,,,"cParNfeRem",.T.,.T.)
+    cSerie   := aParam[01]
+    cNotaIni := aParam[02]
+    cNotaFim := aParam[03]
+
+    If lOK
+        AFAT012A()
+    End
+  
+Return
+
+/*/{Protheus.doc} AFAT012A
+    Função responsável pelo laço de impressão 
+    @type  Static Function
+    @author user
+    @since 06/01/2025
+    @version version
+/*/
+Static Function AFAT012A()
+
+    Local oDanfe as Object
+    Local cAliasSF2 as Character
+
+    cAliasSF2 := GetNextAlias()
+
+   //Definindo o diretório como a temporária do S.O. e o nome do arquivo com a data e hora (sem dois pontos)
+    cCaminho  := GetTempPath()
+    cArquivo  := "AFAT012A"+time()
+     
+    //Criando o objeto do FMSPrinter
+    oDanfe := FWMSPrinter():New(cArquivo, IMP_PDF, .F., "", .T., , @oDanfe, "", , , , .T.)
+
+    oDanfe:SetResolution(78) //Tamanho estipulado para a Danfe
+	oDanfe:SetPortrait()
+	oDanfe:SetPaperSize(DMPAPER_A4)
+	oDanfe:SetMargin(60,60,60,60)
+
+	BeginSql Alias cAliasSF2
+                
+        SELECT 
+            F2_DOC, F2_SERIE, F2_CLIENTE, F2_LOJA
+        FROM 
+            %Table:SF2% SF2
+        INNER JOIN 
+            %Table:SE1% SE1 ON 
+            E1_FILIAL = F2_FILIAL AND E1_PREFIXO = F2_SERIE AND E1_NUM = F2_DOC AND
+            E1_CLIENTE = F2_CLIENTE AND E1_LOJA = F2_LOJA AND E1_NUMBCO <> '' AND SE1.%NOTDEL%
+        WHERE SF2.%NOTDEL%
+            AND F2_FILIAL = %xFilial:SF2%
+            AND F2_DOC BETWEEN %Exp:cNotaIni% And %Exp:cNotaFim%
+            AND F2_SERIE = %Exp:cSerie%
+ 			AND F2_TIPO = 'N'
+        GROUP BY
+            F2_DOC, 
+            F2_SERIE, 
+            F2_CLIENTE, 
+            F2_LOJA 
+        ORDER BY 
+            F2_DOC
+	EndSql
+
+	If (cAliasSF2)->(!EOF())
+
+        While (cAliasSF2)->(!EOF())
+
+            U_RFAT014(oDanfe, (cAliasSF2)->F2_DOC, (cAliasSF2)->F2_SERIE, (cAliasSF2)->F2_CLIENTE, (cAliasSF2)->F2_LOJA)
+
+            (cAliasSF2)->(DbSkip())
+        End
+
+        oDanfe:Preview()
+    End
+
+Return 

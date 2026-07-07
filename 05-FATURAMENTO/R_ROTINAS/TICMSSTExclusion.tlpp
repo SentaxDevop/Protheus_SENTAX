@@ -1,0 +1,451 @@
+#INCLUDE "PROTHEUS.CH"
+#INCLUDE "TOPCONN.CH"
+#INCLUDE 'FWMVCDEF.CH'
+
+/*/{Protheus.doc} TICMSSTExclusion
+    Classe responsável pela gestão do ICMS ST nas rotinas de Nota de Entrada e Nota de Saída
+    @type class
+    @version 1.0
+    @author Alfred Andersen
+    @since 24/10/2025
+    @consultancy Harpia
+    @site www.harpiaconsultoria.com
+/*/
+Class TICMSSTExclusion
+
+    Public Data cProcessName          as Character
+    Public Data cSecondaryProcessName as Character
+    Public Data nRecno                as Numeric
+
+	Public Method New() Constructor
+	Public Method Process()
+	Public Method BalanceTable()
+	Public Method ConsumptionTable()
+
+EndClass
+
+Method New() Class TICMSSTExclusion
+
+	::cProcessName          := ""
+    ::cSecondaryProcessName := ""
+    ::nRecno                := 0
+
+Return(Self)
+
+Method Process() Class TICMSSTExclusion
+
+    Local aArea        := FWGetArea() as Array
+    Local lExclusion   := .T.         as Logical
+    Local cAliasSD2Aux := ""          as Character
+
+    Private cAlias := GetNextAlias() as Character
+
+	If ::cProcessName == "INCLUSION OF INPUT INVOICE"
+
+        BeginSql Alias cAlias
+                    
+            SELECT 
+                R_E_C_N_O_ RECSD1
+            FROM 
+                %Table:SD1% SD1
+            WHERE SD1.%NOTDEL%
+                AND D1_FILIAL   = %Exp:SF1->F1_FILIAL%
+                AND D1_DOC      = %Exp:SF1->F1_DOC%
+                AND D1_SERIE    = %Exp:SF1->F1_SERIE%
+                AND D1_FORNECE  = %Exp:SF1->F1_FORNECE%
+                AND D1_LOJA     = %Exp:SF1->F1_LOJA%
+                AND D1_ICMSRET  > 0
+                AND D1_TIPO     = 'N'
+        EndSql
+
+        If (cAlias)->(!EOF())
+
+            ::cSecondaryProcessName := "INCLUSION"
+
+            While (cAlias)->(!EOF())
+
+                ::nRecno := (cAlias)->RECSD1
+
+                SD1->(DBGOTO(Self:nRecno))
+
+                ::BalanceTable()
+
+                (cAlias)->(DbSkip())
+            End
+
+        End
+
+    ElseIf ::cProcessName == "EXCLUSION OF INPUT INVOICE"
+
+        BeginSql Alias cAlias
+                    
+            SELECT 
+                ZZ3.*
+            FROM 
+                %Table:SF1% SF1
+            INNER JOIN
+                %Table:ZZ3% ZZ3 
+                    ON ZZ3.%NOTDEL%
+                    AND ZZ3_FILIAL  = F1_FILIAL 
+                    AND ZZ3_NOTA    = F1_DOC 
+                    AND ZZ3_SERIE   = F1_SERIE 
+                    AND ZZ3_FORNEC  = F1_FORNECE 
+                    AND ZZ3_LOJA    = F1_LOJA
+            WHERE SF1.%NOTDEL%
+                AND F1_FILIAL   = %Exp:SF1->F1_FILIAL%
+                AND F1_DOC      = %Exp:SF1->F1_DOC%
+                AND F1_SERIE    = %Exp:SF1->F1_SERIE%
+                AND F1_FORNECE  = %Exp:SF1->F1_FORNECE%
+                AND F1_LOJA     = %Exp:SF1->F1_LOJA%
+        EndSql
+
+        If (cAlias)->(!EOF())
+
+            While (cAlias)->(!EOF()) .And. lExclusion
+
+                If !((cAlias)->ZZ3_QTDTOT == (cAlias)->ZZ3_QTDSAL)
+                    lExclusion := .F.
+                End    
+                (cAlias)->(DbSkip())
+            End
+
+            If lExclusion
+
+                (cAlias)->(DbGoTOP())
+
+                ::cSecondaryProcessName := "EXCLUSION"
+
+                While (cAlias)->(!EOF())
+
+                    ::nRecno := (cAlias)->ZZ3_RECSD1
+
+                    ::BalanceTable()
+
+                    (cAlias)->(DbSkip())
+                End
+
+            Else
+
+            End
+
+        End
+
+    ElseIf ::cProcessName == "INCLUSION OF OUTPUT INVOICE"
+
+        cAliasSD2Aux := GetNextAlias()
+
+        BeginSql Alias cAlias
+
+            SELECT 
+                SD2.*
+            FROM 
+                %Table:SD2% SD2
+            WHERE SD2.%NOTDEL%
+                AND D2_VALIMP5 > 0 
+                AND D2_VALIMP6 > 0
+                AND D2_FILIAL   = %Exp:SF2->F2_FILIAL%
+                AND D2_DOC      = %Exp:SF2->F2_DOC%
+                AND D2_SERIE    = %Exp:SF2->F2_SERIE%
+                AND D2_CLIENTE  = %Exp:SF2->F2_CLIENTE%
+                AND D2_LOJA     = %Exp:SF2->F2_LOJA%
+                AND D2_TIPO     = 'N'
+        EndSql
+
+        If (cAlias)->(!EOF())
+
+            ::cSecondaryProcessName := "INCLUSION"
+
+            While (cAlias)->(!EOF())
+
+                ::nRecno := (cAlias)->R_E_C_N_O_
+
+                ::ConsumptionTable()
+
+                (cAlias)->(DbSkip())
+            End
+        End
+
+        (cAlias)->(DbCloseArea())
+
+        //Atualizar tabela SF2
+        BeginSql Alias cAliasSD2Aux
+            SELECT 
+                SUM(D2_BASIMP5) BASE5, SUM(D2_VALIMP5) IMP5, SUM(D2_BASIMP6) BASE6, SUM(D2_VALIMP6) IMP6
+            FROM 
+                %Table:SD2% SD2
+            WHERE SD2.%NOTDEL%
+                AND D2_FILIAL   = %Exp:SF2->F2_FILIAL%
+                AND D2_DOC      = %Exp:SF2->F2_DOC%
+                AND D2_SERIE    = %Exp:SF2->F2_SERIE%
+                AND D2_CLIENTE  = %Exp:SF2->F2_CLIENTE%
+                AND D2_LOJA     = %Exp:SF2->F2_LOJA%
+        EndSql
+
+        If (cAliasSD2Aux)->(!EOF())
+
+            While (cAliasSD2Aux)->(!EOF())
+
+                Reclock("SF2",.F.)
+                    SF2->F2_BASIMP5 := (cAliasSD2Aux)->BASE5
+                    SF2->F2_BASIMP6 := (cAliasSD2Aux)->BASE6
+                    SF2->F2_VALIMP5 := (cAliasSD2Aux)->IMP5
+                    SF2->F2_VALIMP6 := (cAliasSD2Aux)->IMP6
+                SF2->(MsUnLock())
+
+                (cAliasSD2Aux)->(DbSkip())
+            End
+
+        End
+
+        (cAliasSD2Aux)->(DbCloseArea())
+
+    ElseIf ::cProcessName == "EXCLUSION OF OUTPUT INVOICE"
+    
+        ::cSecondaryProcessName := "EXCLUSION"
+
+        ::ConsumptionTable()
+
+    End
+
+    FWRestArea( aArea )
+
+Return()
+
+Method BalanceTable() Class TICMSSTExclusion
+
+    If ::cSecondaryProcessName == "INCLUSION"
+
+        cCodigo := GetSXENum("ZZ3","ZZ3_CODIGO")
+
+        Reclock("ZZ3",.T.)  
+            ZZ3->ZZ3_FILIAL := SD1->D1_FILIAL
+            ZZ3->ZZ3_CODIGO := cCodigo
+            ZZ3->ZZ3_PROD   := SD1->D1_COD
+            ZZ3->ZZ3_QTDTOT := SD1->D1_QUANT
+            ZZ3->ZZ3_QTDCON := SD1->D1_QUANT
+            ZZ3->ZZ3_QTDSAL := SD1->D1_QUANT
+            ZZ3->ZZ3_NOTA   := SD1->D1_DOC
+            ZZ3->ZZ3_SERIE  := SD1->D1_SERIE
+            ZZ3->ZZ3_FORNEC := SD1->D1_FORNECE
+            ZZ3->ZZ3_LOJA   := SD1->D1_LOJA
+            ZZ3->ZZ3_DATA   := dDataBase
+            ZZ3->ZZ3_RECSD1 := ::nRecno
+            ZZ3->ZZ3_ICMST  := SD1->D1_ICMSRET / SD1->D1_QUANT
+        ZZ3->(MSUnlock())
+
+    ElseIf ::cSecondaryProcessName == "EXCLUSION"
+
+        ZZ3->(DbSetorder(3))
+        If ZZ3->(DbSeek(FWxFilial("ZZ3") + STR(SELF:nRecno,8,0)))
+            Reclock("ZZ3",.F.)
+                ZZ3->(DbDelete())
+            ZZ3->(MSUnlock())
+        End
+    End
+
+Return()
+
+Method ConsumptionTable() Class TICMSSTExclusion
+
+    Local cAliasZZ3 := GetNextAlias() as Character
+    Local cAliasSFT := GetNextAlias() as Character 
+    Local cAliasCD2 := GetNextAlias() as Character
+    Local nSaldo    := 0              as Numeric
+    Local nICMS     := 0              as Numeric
+
+    If ::cSecondaryProcessName == "INCLUSION"
+
+        SD2->(DBGOTO(Self:nRecno))
+
+        cNotaFiscal := SD2->D2_DOC
+        cSerie      := SD2->D2_SERIE
+        cItem       := SD2->D2_ITEM
+        cProduto    := SD2->D2_COD
+        nQuantidade := SD2->D2_QUANT
+        cCliente    := SD2->D2_CLIENTE
+        cLoja       := SD2->D2_LOJA
+
+        //Consultar e atualizar tabela de Saldos
+        BeginSql Alias cAliasZZ3
+            SELECT 
+                ZZ3.*
+            FROM 
+                %Table:ZZ3% ZZ3
+            WHERE ZZ3.%NOTDEL%
+                AND ZZ3_FILIAL  = %Exp:SD2->D2_FILIAL%
+                AND ZZ3_PROD    = %Exp:Alltrim(cProduto)%
+                AND ZZ3_QTDSAL  > 0 
+            ORDER BY
+                ZZ3_CODIGO
+        EndSql
+
+        If (cAliasZZ3)->(!EOF())
+
+            nSaldo := nQuantidade
+            nICMS := (cAliasZZ3)->ZZ3_ICMST
+
+            While (cAliasZZ3)->(!EOF())
+
+                If nSaldo == 0
+
+                    Exit
+
+                End
+
+                If (cAliasZZ3)->ZZ3_QTDSAL >= nSaldo
+
+                    nQtdSal := (cAliasZZ3)->ZZ3_QTDSAL - nSaldo
+                    nSaldo  := 0
+
+                Else
+
+                    nSaldo  := (cAliasZZ3)->ZZ3_QTDSAL - nSaldo
+                    nQtdSal := 0
+
+                End
+
+                ZZ3->(DBGOTO((cAliasZZ3)->R_E_C_N_O_))
+
+                 //Atualiza tabela de consumo ICMS ST
+                Reclock("ZZ3",.F.)
+                    ZZ3->ZZ3_QTDSAL := nQtdSal
+                ZZ3->(MSUnlock())
+
+                (cAliasZZ3)->(DbSkip())
+            End
+
+        End
+
+        //Alimentar tabela de consumo extra se aplicável 
+        If nSaldo <> 0
+
+
+        End
+
+        If nICMS > 0
+
+            nValorDedutivel := nICMS * SD2->D2_QUANT
+
+            //Atualizar tabela SD2
+            nBaseImp5 := SD2->D2_BASIMP5 - nValorDedutivel
+            nBaseImp6 := SD2->D2_BASIMP6 - nValorDedutivel
+            nValImp5  := SD2->D2_VALIMP5
+            nValImp6  := SD2->D2_VALIMP6
+            nAliq5    := SD2->D2_ALQIMP5
+            nAliq6    := SD2->D2_ALQIMP6
+
+            Reclock("SD2",.F.)
+                SD2->D2_BASIMP5 := nBaseImp5
+                SD2->D2_BASIMP6 := nBaseImp6
+                SD2->D2_VALIMP5 := nBaseImp5 * (nAliq5/ 100)
+                SD2->D2_VALIMP6 := nBaseImp6 * (nAliq6/ 100)
+            SD2->(MsUnLock())
+
+            //Atualizar tabela SFT
+            //FT_FILIAL+FT_TIPOMOV+FT_SERIE+FT_NFISCAL+FT_CLIEFOR+FT_LOJA+FT_ITEM+FT_PRODUTO                                                                                  
+            BeginSql Alias cAliasSFT
+                SELECT 
+                    R_E_C_N_O_ RECSFT
+                FROM 
+                    %Table:SFT% SFT
+                WHERE SFT.%NOTDEL%
+                    AND FT_FILIAL   = %Exp:SD2->D2_FILIAL%
+                    AND FT_TIPOMOV  = "S"
+                    AND FT_SERIE    = %Exp:cSerie%
+                    AND FT_NFISCAL  = %Exp:cNotaFiscal%
+                    AND FT_CLIEFOR  = %Exp:cCliente%
+                    AND FT_LOJA     = %Exp:cLoja%
+                    AND FT_ITEM     = %Exp:cItem%
+                    AND FT_PRODUTO  = %Exp:Alltrim(cProduto)%
+            EndSql
+
+            If (cAliasSFT)->(!EOF())
+
+                While (cAliasSFT)->(!EOF())
+
+                    SFT->(DBGOTO((cAliasSFT)->RECSFT))
+
+                    nBaseImp5 := SFT->FT_BASECOF - nValorDedutivel
+                    nBaseImp6 := SFT->FT_BASEPIS - nValorDedutivel
+                    nAliq5    := SFT->FT_ALIQCOF
+                    nAliq6    := SFT->FT_ALIQPIS
+
+                    Reclock("SFT",.F.)
+                        SFT->FT_BASECOF := nBaseImp5
+                        SFT->FT_BASEPIS := nBaseImp6
+                        SFT->FT_VALCOF  := nBaseImp5 * (nAliq5/ 100)
+                        SFT->FT_VALPIS  := nBaseImp6 * (nAliq6/ 100)
+                    SFT->(MsUnLock())
+
+                    (cAliasSFT)->(DbSkip())
+
+               End
+
+            End
+
+            //Atualizar tabela CD2
+            //CD2_FILIAL+CD2_TPMOV+CD2_SERIE+CD2_DOC+CD2_CODCLI+CD2_LOJCLI+CD2_ITEM+CD2_CODPRO+CD2_IMP                                                                        
+            BeginSql Alias cAliasCD2
+                SELECT 
+                    R_E_C_N_O_ RECCD2
+                FROM 
+                    %Table:CD2% CD2
+                WHERE CD2.%NOTDEL%
+                    AND CD2_FILIAL  = %Exp:SD2->D2_FILIAL%
+                    AND CD2_TPMOV   = "S"
+                    AND CD2_SERIE   = %Exp:cSerie%
+                    AND CD2_DOC     = %Exp:cNotaFiscal%
+                    AND CD2_CODCLI  = %Exp:cCliente%
+                    AND CD2_LOJCLI  = %Exp:cLoja%
+                    AND CD2_ITEM    = %Exp:cItem%
+                    AND CD2_CODPRO  = %Exp:Alltrim(cProduto)%
+                    AND CD2_IMP IN ('CF2','PS2')
+            EndSql
+
+            If (cAliasCD2)->(!EOF())
+
+                While (cAliasCD2)->(!EOF())
+
+                    CD2->(DBGOTO((cAliasCD2)->RECCD2))
+
+                    If Alltrim(CD2->CD2_IMP) == 'CF2'
+
+                        nBaseImp5 := CD2->CD2_BC - nValorDedutivel
+                        nAliq5    := CD2->CD2_ALIQ
+
+                        Reclock("CD2",.F.)
+                            CD2->CD2_BC     := nBaseImp5
+                            CD2->CD2_VLTRIB := nBaseImp5 * (nAliq5/ 100)
+                        CD2->(MsUnLock())
+
+                    ElseIf  Alltrim(CD2->CD2_IMP) == 'PS2'
+
+                        nBaseImp6 := CD2->CD2_BC - nValorDedutivel
+                        nAliq6    := CD2->CD2_ALIQ
+
+                        Reclock("CD2",.F.)
+                            CD2->CD2_BC     := nBaseImp6
+                            CD2->CD2_VLTRIB := nBaseImp6 * (nAliq6/ 100)
+                        CD2->(MsUnLock())
+
+                    End
+
+                    (cAliasCD2)->(DbSkip())
+
+               End
+
+            End
+
+        End
+
+        (cAliasZZ3)->(DbCloseArea())
+        (cAliasSFT)->(DbCloseArea())
+        (cAliasCD2)->(DbCloseArea())
+
+    ElseIf ::cSecondaryProcessName == "EXCLUSION"
+
+
+    End
+
+
+Return()

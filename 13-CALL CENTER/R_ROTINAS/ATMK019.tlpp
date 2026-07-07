@@ -1,0 +1,34 @@
+#Include "TOTVS.CH"
+
+/*/{Protheus.doc} ATMK019
+	Rotina de atualização manual dos registros que serão responsáveis por alimentar o BI
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 08/02/2026
+    @consultancy Harpia
+    @site www.harpiaconsultoria.com
+/*/
+User Function ATMK019()
+
+    Local aParamBox := {}
+    Local aRet      := {}
+    Local lCentered := .T.
+    Local oObjeto 	:= TSalesTable():New()
+
+	aadd(aParamBox, {1, "Data de início do processamento?" , Ctod(Space(8)), "", "", "", "", 50, .F.}) // Tipo data
+    
+    If ParamBox(aParamBox,"Atualização ", @aRet,,,lCentered,,,,,.T.,.T.)
+
+        FWMsgRun(, {|| U_AFAT009A() }, "Processando", "Atualização dos atendimentos...")
+
+        oObjeto:cDataLimite := MV_PAR01
+
+        FWMsgRun(, {|| oObjeto:Process() }, "Processando", "Exportação dos dados do Call Center para o BI...")
+
+        FWAlertSuccess("Confirme os dados após a próxima atualização do BI", "Processamento finalizado!")
+
+    Endif
+
+
+Return

@@ -1,0 +1,27 @@
+
+
+/*/{Protheus.doc} MS520DEL
+    Esse ponto de entrada está localizado na função MaDelNfs e é executado antes da exclusão do registro da tabela SF2.
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 8/1/2024
+    @requester Kleber 
+    @consultancy Harpia
+    @site www.harpiaconsultoria.com
+    @see https://tdn.totvs.com/display/public/PROT/MS520DEL
+/*/
+User Function MS520DEL()
+
+    Local aArea := GetArea() as Array
+
+    SC5->(DbSetOrder(1))
+    IF SC5->(DbSeek(FWxFilial("SC5") + SD2->D2_PEDIDO))
+        Reclock("SC5", .F.)
+            SC5->C5_XSTAWMS := ""
+        MsunLock()
+    End
+
+    RestArea( aArea )
+
+Return

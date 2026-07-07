@@ -1,0 +1,27 @@
+/*/{Protheus.doc} A250ETRAN
+    O ponto de entrada A250ETRAN é executado após gravação total dos movimentos, na inclusão do apontamento de produção simples.
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 5/20/2024
+    @requester Kleber Moro
+    @consultancy Harpia
+    @site www.harpiaconsultoria.com
+/*/
+User Function A250ETRAN() 
+
+    Local oClass as Object
+
+    IF SD3->D3_TM == '002' .And. !Empty(SD3->D3_OP)
+        If FWAlertYesNo("Deseja enviar para o Cyberlog os dados desta Ordem de Produção?", "Integração Cyberlog")
+        
+            //Envia a OP para o WMS
+            oClass := TIntegracaoProtheusxWMSCyberlog():New()
+            oClass:SendProductionOrder()
+
+        End
+    End
+
+    FreeObj( oClass )
+
+Return

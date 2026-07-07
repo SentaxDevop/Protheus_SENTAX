@@ -1,0 +1,16 @@
+
+/*/{Protheus.doc} OM010MNU
+    Este Ponto de Entrada permite incluir novas opções no array aRotina.
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 11/08/2023
+    @requester Kleber Moro
+    @consultancy Harpia
+    @site www.harpiaconsultoria.com
+/*/
+User Function OM010MNU
+
+    aadd(aRotina,{'Atualiza Custo','U_AFAT007()' , 0 , 4,0,NIL})
+
+Return

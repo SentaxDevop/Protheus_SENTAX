@@ -1,0 +1,411 @@
+//Bibliotecas
+#Include "Totvs.ch"
+#Include "FWPrintSetup.ch"
+#include "topconn.ch"
+#include "rwmake.ch"
+
+//Alinhamentos
+#Define PAD_LEFT    0
+#Define PAD_RIGHT   1
+#Define PAD_CENTER  2
+#Define PAD_JUSTIFY 3 //Opção disponível somente a partir da versão 1.6.2 da TOTVS Printer
+#Define IMP_SPOOL   2
+
+//Variável de setup que será acionada na primeira impressão
+Static oSetupRel
+
+/*/{Protheus.doc} User Function REST007
+    impressão das etiquetas de entrega
+    @author Alfred Christian Andersen
+    @since 17/06/2025
+    @version 1.0
+    @type function
+/*/
+
+User Function REST007()
+
+    Local lRet     := .F.                 
+    Local aCampos  := {}
+    Local aBrowse  := {}
+    Local bOk      := {|| lRet := .T.,IIF(lRet,/*MONTAREL()*/REST007A(),),oDlg:END()}
+    Local bCancel  := {|| lRet := .F.,oDlg:END()}
+    Local aButtons := {}     
+    Local aPergs   := {} 
+    Private lMarca := .F.
+
+    lEnd     := .F.
+    cPerg    := "EST1000"
+
+    SX1->(dbSeek(xFilial("SX1")+cPerg,.T.))                                                                  
+    If SX1->(!Found())
+        AADD(aPergs,{"Nota Inicial ","Nota Inicial ","Nota Inicial ","mv_ch1","C",09,0,0,"G","","MV_PAR01","","","","","","","","","","","","","","","","","","","","","","","","","SF2001","","","",""})
+        AADD(aPergs,{"Nota Final   ","Nota Final   ","Nota Final   ","mv_ch2","C",09,0,0,"G","","MV_PAR02","","","","","","","","","","","","","","","","","","","","","","","","","SF2001","","","",""})
+        AADD(aPergs,{"Série Inicial","Série Inicial","Série Inicial","mv_ch3","C",03,0,0,"G","","MV_PAR03","","","","","","","","","","","","","","","","","","","","","","","","","","","","",""})
+        AADD(aPergs,{"Série Final  ","Série Final  ","Série Final  ","mv_ch4","C",03,0,0,"G","","MV_PAR04","","","","","","","","","","","","","","","","","","","","","","","","","","","","",""})
+        AADD(aPergs,{"Visualiza    ","Visualiza    ","Visualiza    ","mv_ch5","N",01,0,0,"C","","MV_PAR05","Sim","Sim","Sim","","","Nao","Nao","Nao","","","","","","","","","","","","","","","","","",""})
+    Endif
+
+    Pergunte(cPerg,.T.)
+
+    //fecha temporário caso esteja aberto
+    If (Select("TRB") <> 0)
+        dbSelectArea("TRB")
+        dbCloseArea()
+    Endif		
+
+    dbSelectArea("SF2")
+
+    //campos da tabela de temporária
+    AADD(aCampos,{"F2_FLAG   ","C",02,0})
+    AADD(aCampos,{"F2_DOC    ","C",09,0})
+    AADD(aCampos,{"F2_SERIE  ","C",03,0})
+    AADD(aCampos,{"F2_CLIENTE","C",06,0})
+    AADD(aCampos,{"F2_LOJA   ","C",02,0})
+    AADD(aCampos,{"A1_NOME   ","C",50,0})
+    AADD(aCampos,{"F2_TRANSP ","C",06,0})
+    AADD(aCampos,{"F2_VOLUME1","N",03,0})
+
+    //campos a serem exibidos na tela de markbrowse
+    AADD(aBrowse,{"F2_FLAG   ","       ","@!",02,0,".T."})
+    AADD(aBrowse,{"F2_DOC    ","Nota   ","@!",09,0,".T."}) 
+    AADD(aBrowse,{"F2_SERIE  ","Serie  ","@!",03,0,".T."})
+    AADD(aBrowse,{"F2_CLIENTE","Cliente","@!",06,0,".T."})
+    AADD(aBrowse,{"F2_LOJA   ","Loja   ","@!",02,0,".T."})
+    AADD(aBrowse,{"A1_NOME   ","Nome   ","@!",50,0,".T."})
+    AADD(aBrowse,{"F2_TRANSP ","Transp ","@!",06,0,".T."})
+    AADD(aBrowse,{"F2_VOLUME1","Volumes","@!",03,0,".T."})
+
+    oTmp := FWTemporaryTable( ):New('TRB')
+    oTmp:SetFields( aCampos )
+    oTmp:Create( )
+    cAliasTRB := oTmp:GetAlias( )     
+
+    //seleciona registros
+    cQuery := " SELECT F2_DOC, F2_SERIE, F2_CLIENTE, F2_LOJA, F2_VOLUME1, F2_TRANSP, A1_NOME "
+    cQuery += " FROM " + RetSQLName("SF2") + " SF2, " + RetSQLName("SA1") + " SA1 "
+    cQuery += " WHERE "
+    cQuery += " SF2.F2_FILIAL = '"+xFilial("SF2")+"' AND "
+    cQuery += " SF2.F2_DOC >= '"+mv_par01+"' AND SF2.F2_DOC <= '"+mv_par02+"' AND "
+    cQuery += " SF2.F2_SERIE >= '"+mv_par03+"' AND SF2.F2_SERIE <= '"+mv_par04+"' AND "
+    cQuery += " SF2.F2_CLIENTE+SF2.F2_LOJA = SA1.A1_COD+SA1.A1_LOJA  AND "
+    cQuery += " SF2.D_E_L_E_T_ = ' ' AND SA1.D_E_L_E_T_ = ' ' "
+    cQuery += " ORDER BY F2_DOC, F2_SERIE "
+
+    SqlToTrb(cQuery,aCampos,"TRB")
+
+    TRB->(dbGoTop())
+    AADD(aButtons,{"EDIT",{|| MarkAll(lMarca)},"Marca Todos","Marca Todos"})
+
+    @ 143,050 To 447,865 Dialog oDlg Title OemToAnsi("Impressão Etiquetas Entrega")
+
+    @ 030,001 To 147,400 Browse "TRB" Fields aBrowse Mark "F2_FLAG" Object oFields
+
+    InitMark()
+
+    Activate Dialog oDlg Centered On Init (EnchoiceBar(oDlg,bOk,bCancel,,aButtons))
+
+Return
+
+/*/{Protheus.doc} REST007A
+    Controle dos registros a serem impressos
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 6/19/2025
+/*/
+Static Function REST007A()
+
+    Local aDadosImp := {}
+    Local nI := 0
+
+    TRB->(dbGoTop())
+    If TRB->(!Eof())
+        While TRB->(!Eof())
+            IncProc("Processando... Aguarde")
+            aDadosPro := {TRB->F2_DOC     ,;
+                        TRB->F2_SERIE	  ,; 
+                        TRB->F2_CLIENTE ,;
+                        TRB->F2_LOJA    ,;
+                        TRB->F2_VOLUME1 ,;
+                        TRB->F2_TRANSP  }
+
+            If Marked("F2_FLAG")
+                For nI := 1 To TRB->F2_VOLUME1
+
+                    cEtiq := Strzero(nI,3)
+
+                    aAdd(aDadosImp, {aDadosPro, cEtiq})
+                Next
+            Endif
+            TRB->(dbSkip())		
+        Enddo    
+    Endif
+
+    dbSelectArea("TRB")
+    TRB->(dbCloseArea("TRB"))
+
+    If Len(aDadosImp) > 0
+        REST007B(aDadosImp)
+    Else
+        FWAlertInfo("Nenhum registro selecionado!", "[REST007 - 01]")
+    End
+
+Return
+
+/*/{Protheus.doc} REST007B
+    Função responsável pela impressão
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 6/19/2025
+/*/
+Static Function REST007B(aDados as Array)
+
+	Local aArea         := FWGetArea()
+	Local oPrint
+	Local nMiliAltur    := 60
+	Local nMiliLargu    := 100
+	Local nAlturPx		:= nMiliAltur * 2.95
+	Local nLarguPx		:= nMiliLargu * 2.95
+	Local cLogo         := 'SENTAX.JPG'
+	Local lNegrito      := .T.
+	Local lSublinhado   := .T.
+	Local lItalico      := .T.
+	Local cNomeFont     := 'Tahoma'
+	Local oFontDadN     := TFont():New(cNomeFont, /*uPar2*/, -15, /*uPar4*/,     lNegrito, /*uPar6*/, /*uPar7*/, /*uPar8*/, /*uPar9*/, ! lSublinhado, ! lItalico)
+	Local oFontDadN2    := TFont():New(cNomeFont, /*uPar2*/, -15, /*uPar4*/,     lNegrito, /*uPar6*/, /*uPar7*/, /*uPar8*/, /*uPar9*/, ! lSublinhado, ! lItalico)
+	Local oFontDad      := TFont():New(cNomeFont, /*uPar2*/, -09, /*uPar4*/,   ! lNegrito, /*uPar6*/, /*uPar7*/, /*uPar8*/, /*uPar9*/, ! lSublinhado, ! lItalico)
+	Local nColSepara    := 010
+	Local nLinAtu       := 030
+	Local nLargurTxt    := nLarguPx - (nColSepara + 3)
+	Local cTexto        := ''
+    Local nNx := 0
+
+    Local cVolume         := ""
+    Local cNotaFiscal     := ""
+    Local cSerie          := ""
+    Local cCliente        := ""
+    Local cLoja           := ""
+    Local cVolumeTotal    := ""
+    Local cTransportadora := ""
+    Local cNomeCliente    := ""
+    Local cEndereco       := ""
+    Local cCidade         := ""
+    Local cEstado         := ""
+    Local cCep            := ""
+	
+	//Criando a impressão
+	oPrint := FWMSPrinter():New(;
+		'REST007',;     // cFilePrintert
+		,;              // nDevice
+		.F.,;           // lAdjustToLegacy
+		GetTempPath(),; // cPathInServer
+		.T.;            // lDisabeSetup
+	)
+	
+	//Se ainda não tiver configuração de Setup
+	While ValType(oSetupRel) == 'U'
+		fConfImpr()
+	EndDo
+	
+	//Puxa as definições da impressora
+	If oSetupRel:GetProperty(PD_PRINTTYPE) == IMP_SPOOL
+		oPrint:nDevice := IMP_SPOOL
+		oPrint:cPrinter := oSetupRel:aOptions[PD_VALUETYPE]
+	Endif
+	
+    For nNx := 1 to Len(aDados)
+
+        cVolume         := aDados[nNx][2]
+        cNotaFiscal     := aDados[nNx][1][1]
+        cSerie          := aDados[nNx][1][2]
+        cCliente        := aDados[nNx][1][3]
+        cLoja           := aDados[nNx][1][4]
+        cVolumeTotal    := Strzero(aDados[nNx][1][5],3)
+        cTransportadora := Substr(Posicione("SA4",1,xFilial("SA4")+aDados[nNx][1][6],"A4_NOME"),1,25)
+
+        SA1->(DbSetOrder(1))
+        If SA1->(DbSeek(FWxFilial("SA1") + cCliente + cLoja))   
+
+            cNomeCliente := Substr(Upper(SA1->A1_NOME),1,25)
+            cEndereco    := Substr(Upper(SA1->A1_ENDENT),1,25)
+            cCidade      := Upper(SA1->A1_MUN)
+            cEstado      := Upper(SA1->A1_EST)
+            cCep         := Transform(SA1->A1_CEP,"@R 99999-999")
+
+        End
+
+        nLinAtu := 005
+
+        //Inicia a página
+        oPrint:StartPage()
+        
+        //Faz um quadro informando os limites em pixels da etiqueta
+        oPrint:Box(0, 0, nAlturPx, nLarguPx)
+
+        oPrint:SayBitmap(001, 200, cLogo, 0080, 050)
+
+        nColSepara := 025
+   
+        //Começa a impressão dos campos
+        cTexto  := 'Nota Fiscal'
+        oPrint:SayAlign(nLinAtu, nColSepara + 2, cTexto, oFontDad, nLargurTxt, 15, /*nClrText*/, PAD_LEFT, /*nAlignVert*/)
+        nLinAtu += 8
+
+        cTexto  := cValToChar(cNotaFiscal) + "-" + cValToChar(cSerie)
+        oPrint:SayAlign(nLinAtu, nColSepara + 4, cTexto, oFontDadN, nLargurTxt, 25, /*nClrText*/, PAD_LEFT, /*nAlignVert*/)
+        nLinAtu += 31
+        
+        cTexto  := 'Razão Social'
+        oPrint:SayAlign(nLinAtu, nColSepara + 2, cTexto, oFontDad, nLargurTxt, 15, /*nClrText*/, PAD_LEFT, /*nAlignVert*/)
+        nLinAtu += 7
+        
+        cTexto  := cValToChar(cNomeCliente)
+        oPrint:SayAlign(nLinAtu, nColSepara + 4, cTexto, oFontDadN2, nLargurTxt, 15, /*nClrText*/, PAD_LEFT, /*nAlignVert*/)
+        nLinAtu += 14
+        
+        cTexto  := 'Endereço'
+        oPrint:SayAlign(nLinAtu, nColSepara + 2, cTexto, oFontDad, nLargurTxt, 15, /*nClrText*/, PAD_LEFT, /*nAlignVert*/)
+        nLinAtu += 7
+        
+        cTexto  := cValToChar(cEndereco)
+        oPrint:SayAlign(nLinAtu, nColSepara + 4, cTexto, oFontDadN2, nLargurTxt, 45, /*nClrText*/, PAD_LEFT, /*nAlignVert*/)
+        nLinAtu += 14
+
+        cTexto  := 'Cidade'
+        oPrint:SayAlign(nLinAtu, nColSepara + 2, cTexto, oFontDad, nLargurTxt, 15, /*nClrText*/, PAD_LEFT, /*nAlignVert*/)
+
+        cTexto  := 'UF'
+        oPrint:SayAlign(nLinAtu, nColSepara + 180, cTexto, oFontDad, nLargurTxt, 15, /*nClrText*/, PAD_LEFT, /*nAlignVert*/)
+
+        nLinAtu += 7
+        
+        cTexto  := cValToChar(cCidade)
+        oPrint:SayAlign(nLinAtu, nColSepara + 4, cTexto, oFontDadN, nLargurTxt, 45, /*nClrText*/, PAD_LEFT, /*nAlignVert*/)
+        
+        cTexto  := cValToChar(cEstado)
+        oPrint:SayAlign(nLinAtu, nColSepara + 185, cTexto, oFontDadN, nLargurTxt, 45, /*nClrText*/, PAD_LEFT, /*nAlignVert*/)
+
+        nLinAtu += 14
+
+        cTexto  := 'CEP'
+        oPrint:SayAlign(nLinAtu, nColSepara + 2, cTexto, oFontDad, nLargurTxt, 15, /*nClrText*/, PAD_LEFT, /*nAlignVert*/)
+        
+        cTexto  := 'Volume'
+        oPrint:SayAlign(nLinAtu, nColSepara + 180, cTexto, oFontDad, nLargurTxt, 15, /*nClrText*/, PAD_LEFT, /*nAlignVert*/)
+
+        nLinAtu += 7
+        
+        cTexto  := cValToChar(cCep)
+        oPrint:SayAlign(nLinAtu, nColSepara + 4, cTexto, oFontDadN, nLargurTxt, 45, /*nClrText*/, PAD_LEFT, /*nAlignVert*/)
+
+        cTexto  := cValToChar(cVolume) + "/" + cVolumeTotal
+        oPrint:SayAlign(nLinAtu, nColSepara + 185, cTexto, oFontDadN, nLargurTxt, 45, /*nClrText*/, PAD_LEFT, /*nAlignVert*/)
+
+        nLinAtu += 14
+
+        cTexto  := 'Transportadora'
+        oPrint:SayAlign(nLinAtu, nColSepara + 2, cTexto, oFontDad, nLargurTxt, 15, /*nClrText*/, PAD_LEFT, /*nAlignVert*/)
+        nLinAtu += 7
+        
+        cTexto  := cValToChar(cTransportadora)
+        oPrint:SayAlign(nLinAtu, nColSepara + 4, cTexto, oFontDadN, nLargurTxt, 45, /*nClrText*/, PAD_LEFT, /*nAlignVert*/)
+        //nLinAtu += 15
+
+	//Inicia a página
+	oPrint:EndPage()
+
+    Next
+	
+	//Mandando para o spool de impressão
+	oPrint:Print()
+	
+	FWRestArea(aArea)
+Return
+
+/*/{Protheus.doc} fConfImpr
+    Abre a tela para selecionar a impressora da REST007
+    @author Alfred Christian Andersen
+    @since 17/06/2025
+    @version 1.0
+    @type function
+/*/
+
+Static Function fConfImpr()
+	Local aArea         := FWGetArea()
+	Local aDevice       := {'DISCO', 'SPOOL', 'EMAIL', 'EXCEL', 'HTML', 'PDF'}
+	Local oSetup
+	Local cSession  	:= GetPrinterSession()
+	Local cDevice     	:= If(Empty(fwGetProfString(cSession,'PRINTTYPE','SPOOL',.T.)),'PDF',fwGetProfString(cSession,'PRINTTYPE','SPOOL',.T.))
+	Local nPrintType    := aScan(aDevice, {|x| x == cDevice })
+	Local nOrientation  := 1 //If(fwGetProfString(cSession, 'ORIENTATION', 'PORTRAIT', .T.) == 'PORTRAIT', 1, 2)
+	Local nLocal        := 2 //If(fwGetProfString(cSession, 'LOCAL', 'SERVER', .T.) == 'SERVER', 1, 2)
+	Local nFlags        := PD_ISTOTVSPRINTER + PD_DISABLEPAPERSIZE + PD_DISABLEPREVIEW + PD_DISABLEMARGIN
+	
+	//Cria o setup do relatório
+	oSetup := FWPrintSetup():New(nFlags, 'ETIQUETA')
+	oSetup:SetPropertY(PD_DESTINATION , nLocal)
+	oSetup:SetPropertY(PD_ORIENTATION , nOrientation)
+	oSetup:SetPropertY(PD_PRINTTYPE   , nPrintType)
+	oSetup:SetPropertY(PD_MARGIN      , {0,0,0,0})
+	
+	oSetupRel := Nil
+	
+	//Se a tela for confirmada, atualiza o setup default do relatório
+	If oSetup:Activate() == PD_OK
+		If oSetup:GetProperty(PD_PRINTTYPE) == IMP_SPOOL .And. oSetup:GetProperty(PD_DESTINATION) == 2
+			oSetupRel := oSetup
+		Else
+			FWAlertInfo('Escolha o tipo SPOOL e LOCAL para impressão!')
+		EndIf
+	EndIf
+	
+	FWRestArea(aArea)
+Return
+
+/*/{Protheus.doc} InitMark
+    rotina utilizada para inicialização das marcações no browse - Herança do ESTA1000
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 6/19/2025
+/*/
+Static Function InitMark()
+
+    TRB->(dbGoTop())
+    While TRB->(!Eof())                             
+        RecLock("TRB",.F.)
+        TRB->F2_FLAG := ThisMark()
+        TRB->(MsUnlock())
+                
+        TRB->(dbSkip())	
+    Enddo      
+
+    TRB->(dbGoTop())
+
+Return
+
+/*/{Protheus.doc} MarkAll
+    Marca todos os registros para impressão - Herança do ESTA1000
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 6/19/2025
+/*/  
+Static Function MarkAll(lMarca)
+
+    Local nRecAtu := TRB->(Recno())
+
+    TRB->(dbGoTop())
+    While TRB->(!Eof())
+        Reclock("TRB",.F.)
+        TRB->F2_FLAG := IIF(lMarca,Space(2),GetMark())
+        TRB->(MsUnlock())
+
+        TRB->(dbSkip())
+    Enddo	
+
+    TRB->(dbGoTop(nRecAtu))
+    lMarca := !lMarca
+
+Return

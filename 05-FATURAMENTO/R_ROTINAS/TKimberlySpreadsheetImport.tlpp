@@ -1,0 +1,475 @@
+#include 'totvs.ch'
+
+
+/*/{Protheus.doc} AFAT010
+    Função responsável por ler e importar a planilha da Kimberly para a tabela ZZ1
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/10/2024
+    @requester Kleber Moro
+    @consultancy Harpia
+    @site www.harpiaconsultoria.com
+/*/
+User Function AFAT010()
+
+    Local aDados1   as Array
+    Local aDados2   as Array
+    Local nLin      as Numeric
+    Local cTipo     as Character
+    Local cNomeARQ  as Character
+    Local oClass as Object
+
+    aDados1   := {}
+    aDados2   := {}
+    nLin      := 0
+    cTipo     := "Planilha Excel  (*.xlsx)  | *.xlsx | "
+    cNomeARQ  := cGetFile(cTipo,OemToAnsi("Selecionar Arquivo..."))
+    oClass := TKimberlySpreadsheetImport():New()	
+
+    if !empty(cNomeARQ)
+
+        nHandle := FT_FUSE(cNomeARQ)
+        
+        if nHandle < 0
+            Alert("Erro ao abrir o arquivo! Verificar diretório, arquivo informado.")
+            Return .F.
+        endif
+        
+        //Converte arquivo .XLSX para Array
+        oClass:cSpreadsheet := cNomeARQ
+        aDados1 := oClass:SpreadsheetConversion()
+        
+        //Remove a Primeira Linha
+        For nLin := 2 To Len(aDados1)
+            aAdd(aDados2, aDados1[nLin])
+        Next nLin 
+
+        Processa( {|| oClass:ImportSpreadsheet(aDados2) } , "Aguarde realizando a importação..."+CRLF+"Pode demorar")
+
+        FT_FUSE()  
+        
+    endif
+
+    FreeObj(oClass)
+
+Return Nil
+
+
+/*/{Protheus.doc} TKimberlySpreadsheetImport
+    Classe responsável por ler e importar a planilha da Kimberly para a tabela ZZ1
+    @type class
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/10/2024
+/*/
+Class TKimberlySpreadsheetImport
+
+	Public Data cSpreadsheet as Character
+
+	Public Method New() Constructor
+	Public Method SpreadsheetConversion() 
+	Public Method ImportSpreadsheet() 
+
+    Public Method FilesIntegration() 
+    Public Method ConverterXLStoCSV() 
+    Public Method ConverterCSVtoArray() 
+    Public Method ValidateFields()
+
+EndClass
+
+/*/{Protheus.doc} TKimberlySpreadsheetImport::New
+    Método contrutor da classe
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/10/2024
+/*/
+Method New() Class TKimberlySpreadsheetImport
+
+	::cSpreadsheet := ""
+
+Return(Self)
+
+/*/{Protheus.doc} TKimberlySpreadsheetImport::SpreadsheetConversion
+    Função que realiza a importação do arquivo .XLSX para um array
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/10/2024
+/*/
+Method SpreadsheetConversion() Class TKimberlySpreadsheetImport
+
+   Local cMsg        as Character
+   Local nPosIni     as Numeric
+
+   Private cArq       as Character
+   Private _cNomeAr   as Character
+   Private cArqMacro  as Character
+   Private cTemp      as Character
+   Private cSystem    as Character
+   Private cOrigem    as Character
+   Private nLinTit    as Numeric
+   Private aArquivos  as Array
+   Private aRet       as Array
+
+   cMsg      := ""
+   nPosIni   := 0
+   cArq      := ""
+   _cNomeAr  := ::cSpreadsheet
+   cArqMacro := "XLS2DBF.XLA"
+   cTemp     := GetTempPath() //pega caminho do temp do client
+   cSystem   := Upper(GetSrvProfString("STARTPATH","")) //Pega o caminho do sistema
+   cOrigem   := ""
+   nLinTit   := 0
+   aArquivos := {}
+   aRet      := {}
+
+   cArq := Alltrim(_cNomeAr)
+   cMsg := ::ValidateFields(cArq)
+
+   nPosIni  := RAt("\",cArq) + 1
+   nPosFim  := Len(Alltrim(cArq)) + 1
+   
+   cOrigem := SUBSTR(cArq,1,nPosIni-1)
+   cArq    := SUBSTR(cArq,nPosIni,nPosFim)
+
+   If Empty(cMsg)
+
+      aadd(aArquivos, cArq)
+      ::FilesIntegration()
+
+   Else
+
+      MsgStop(cMSg)
+      Return
+
+   EndIf
+
+Return aRet
+
+/*/{Protheus.doc} TKimberlySpreadsheetImport::FilesIntegration
+    Faz a chamada das rotinas referentes a integração
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/10/2024
+/*/
+Method FilesIntegration() Class TKimberlySpreadsheetImport
+
+    Local lConv as Logical
+
+    lConv := .F.
+
+    //converte arquivos xls para csv copiando para a pasta temp
+    MsAguarde( {|| lConv := ::ConverterXLStoCSV(aArquivos) }, "Convertendo arquivo", "Convertendo arquivo" )
+   
+    If lConv
+
+        //carrega do xls no array
+        Processa( {|| aRet:= ::ConverterCSVtoArray(AllTrim(cArq)) } ,"Aguarde, carregando planilha..."+CRLF+"Pode demorar") 
+
+    EndIf
+
+Return
+
+/*/{Protheus.doc} TKimberlySpreadsheetImport::ConverterXLStoCSV
+    Converte os arquivos .xls para .csv
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/10/2024
+/*/
+Method ConverterXLStoCSV(aArqs as Array) Class TKimberlySpreadsheetImport
+
+    Local oExcelApp as Object
+    Local cNomeXLS  as Character
+    Local cFile     as Character
+    Local cExtensao as Character
+    Local i         as Numeric
+    Local j         as Numeric
+    Local aExtensao as Array
+
+    cNomeXLS  := ""
+    cFile     := ""
+    cExtensao := ""
+    i         := 1
+    j         := 1
+    aExtensao := {}
+
+    //loop em todos arquivos que serão convertidos
+    For i := 1 To Len(aArqs)      
+
+        If !"." $ AllTrim(aArqs[i])
+
+            //passa por aqui para verifica se a extensão do arquivo é .xls ou .xlsx
+            aExtensao := Directory(cOrigem+AllTrim(aArqs[i])+".*")
+
+            For j := 1 To Len(aExtensao)
+
+                If "XLS" $ Upper(aExtensao[j][1])
+
+                    cExtensao := SubStr(aExtensao[j][1],Rat(".",aExtensao[j][1]),Len(aExtensao[j][1])+1-Rat(".",aExtensao[j][1]))
+                    Exit
+
+                EndIf
+
+            Next j
+
+        EndIf
+
+        //recebe o nome do arquivo corrente
+        cNomeXLS := AllTrim(aArqs[i])
+        cFile    := cOrigem+cNomeXLS+cExtensao
+        
+        If !File(cFile)
+
+            MsgInfo("O arquivo "+cFile+" não foi encontrado!" ,"Arquivo")      
+            Return .F.
+
+        EndIf
+            
+        //verifica se existe o arquivo na pasta temporaria e apaga
+        If File(cTemp+cNomeXLS+cExtensao)
+            fErase(cTemp+cNomeXLS+cExtensao)
+        EndIf                 
+        
+        //Copia o arquivo XLS para o Temporario para ser executado
+        Copy File &cFile To &(cTemp+cNomeXLS+cExtensao)                                
+        
+        //apaga macro da pasta temporária se existir
+        If File(cTemp+cArqMacro)
+            fErase(cTemp+cArqMacro)
+        EndIf
+
+        //Copia o arquivo XLA para o Temporario para ser executado
+        Copy File &(cSystem+cArqMacro) To &(cTemp+cArqMacro)
+
+        //Exclui o arquivo antigo (se existir)
+        If File(cTemp+cNomeXLS+".csv")
+            fErase(cTemp+cNomeXLS+".csv")
+        EndIf
+        
+        //Inicializa o objeto para executar a macro
+        oExcelApp := MsExcel():New()             
+        //define qual o caminho da macro a ser executada
+        oExcelApp:WorkBooks:Open(cTemp+cArqMacro)       
+        //executa a macro passando como parametro da macro o caminho e o nome do excel corrente
+        oExcelApp:Run(cArqMacro+'!XLS2DBF',cTemp,cNomeXLS)
+        //fecha a macro sem salvar
+        oExcelApp:WorkBooks:Close('savechanges:=False')
+        //sai do arquivo e destrói o objeto
+        oExcelApp:Quit()
+        oExcelApp:Destroy()
+
+        //Exclui o Arquivo excel da temp
+        fErase(cTemp+cNomeXLS+cExtensao)
+        //Exclui a Macro no diretorio temporario
+        fErase(cTemp+cArqMacro) 
+    
+    Next i
+ 
+Return .T. 
+
+/*/{Protheus.doc} TKimberlySpreadsheetImport::ConverterCSVtoArray
+    Carrega dados do csv no array pra retorno
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/8/2024
+/*/
+Method ConverterCSVtoArray(cArq as Character) Class TKimberlySpreadsheetImport
+
+    Local cLinha   as Character
+    Local cNomeArq as Character
+    Local nLin     as Numeric
+    Local aDados   as Array
+    Local cFile    as Character
+    Local nHandle  as Numeric
+
+    cLinha  := ""
+    cNomeArq:= ""
+    nLin    := 1 
+    aDados  := {}
+    cFile   := ""
+    nHandle := 0
+
+    cNomeArq  := SUBSTR(cArq,1,RAt(".",cArq)-1)
+
+    cFile   := cTemp + cNomeArq + ".csv"
+
+    //abre o arquivo csv gerado na temp
+    nHandle := Ft_Fuse(cFile)
+
+    If nHandle == -1
+        Return aDados
+    EndIf
+
+    Ft_FGoTop()                                                         
+
+    nLinTot := FT_FLastRec()-1
+
+    ProcRegua(nLinTot)
+    
+    //Pula as linhas de cabeçalho
+    While nLinTit > 0 .AND. !Ft_FEof()
+
+        Ft_FSkip()
+        nLinTit--
+
+    EndDo
+
+    //percorre todas linhas do arquivo csv
+    Do While !Ft_FEof()
+
+        //exibe a linha a ser lida
+        IncProc("Carregando Linha "+AllTrim(Str(nLin))+" de "+AllTrim(Str(nLinTot)))
+
+        nLin++
+
+        //le a linha
+        cLinha := Ft_FReadLn()
+
+        //verifica se a linha está em branco, se estiver pula
+        If Empty(AllTrim(StrTran(cLinha,';','')))
+
+            Ft_FSkip()
+            Loop
+
+        EndIf
+
+        //transforma as aspas duplas em aspas simples
+        cLinha := StrTran(cLinha,'"',"'")
+        cLinha := '{"'+cLinha+'"}' 
+
+        //adiciona o cLinha no array trocando o delimitador ; por , para ser reconhecido como elementos de um array 
+        cLinha := StrTran(cLinha,';','","')
+        cLinha := StrTran(cLinha,',""','')
+
+        aAdd(aDados, &cLinha)
+        
+        //passa para a próxima linha
+        FT_FSkip()
+    
+    EndDo
+
+    //libera o arquivo CSV
+    FT_FUse()             
+
+    //Exclui o arquivo csv
+    If File(cFile)
+        FErase(cFile)
+    EndIf
+
+Return aDados
+
+/*/{Protheus.doc} TKimberlySpreadsheetImport::ValidateFields
+    Faz a validação dos campos da tela de filtro
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/8/2024
+/*/
+Method ValidateFields(cArq as Character) Class TKimberlySpreadsheetImport
+
+    Local cMsg as Character
+
+    cMsg := ""
+
+    If Empty(cArq)
+
+        cMsg += "Campo Arquivo deve ser preenchido!"+ENTER
+
+    EndIf                            
+
+Return cMsg
+
+/*/{Protheus.doc} TKimberlySpreadsheetImport::ImportSpreadsheet
+    Função que realiza a importação dos dados para a ZZ1
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/10/2024
+/*/
+Method ImportSpreadsheet(aDados as Array) Class TKimberlySpreadsheetImport
+
+    Local aCampo  as Array
+    Local nX      as Numeric
+    Local nLinTot as Numeric
+    Local nTotGrv as Numeric
+    Local nTotIgn as Numeric
+    Local cMsgLog as Character
+    Local lRegOK  as Logical
+    Local cFil    as Character
+    Local cCodigo as Character
+    Local dData   as Date
+    Local cHora   as Character
+
+    aCampo      := {}
+    nX          := 0
+    nLinTot     := 0
+    nTotGrv     := 0
+    nTotIgn     := 0
+    cMsgLog     := ""
+    lRegOK      := .T.
+    cFil        := FwxFilial("ZZ1")
+    cCodigo     := GETSX8NUM("ZZ1","ZZ1_CODIGO")
+    dData       := Date()
+    cHora       := Time()
+
+    nLinTot := Len(aDados)
+
+    ProcRegua(nLinTot)
+
+    For nX := 1 To Len(aDados) 
+
+        If nX == 1
+            If Len(aDados[nX]) == 15 
+                ConfirmSX8() 
+            Else
+                FWAlertError("Planilha com a quantidade diferente de 15 colunas, não será possível a importação.", "TKimberlySpreadsheetImport")
+                Return
+            End
+        End
+
+        IncProc("Analisando registro "+AllTrim(Str(nX))+" de "+AllTrim(Str(nLinTot)))     
+        aCampo := {}
+            
+        If lRegOK
+                                         
+            RecLock( 'ZZ1' ,.T.)
+                ZZ1->ZZ1_FILIAL := cFil
+                ZZ1->ZZ1_CODIGO := cCodigo
+                ZZ1->ZZ1_DATA   := dData
+                ZZ1->ZZ1_HORA   := cHora
+                ZZ1->ZZ1_CTR    := AllTrim(aDados[nX][1])
+                ZZ1->ZZ1_CODDIS := AllTrim(aDados[nX][2])
+                ZZ1->ZZ1_NOMDIS := AllTrim(aDados[nX][3])
+                ZZ1->ZZ1_IDUSER := If(AllTrim(aDados[nX][4]) == "0", "",AllTrim(aDados[nX][4]))
+                ZZ1->ZZ1_NOMUSE := FwCutOff(FWNoAccent(AllTrim(aDados[nX][5])),.T.)
+                ZZ1->ZZ1_TAXID  := AllTrim(aDados[nX][6])
+                ZZ1->ZZ1_PROD   := AllTrim(aDados[nX][7])
+                ZZ1->ZZ1_NOMPRO := FwCutOff(FWNoAccent(AllTrim(aDados[nX][8])),.T.)
+                ZZ1->ZZ1_DTINIC := CTOD(aDados[nX][9])
+                ZZ1->ZZ1_DTFIM  := CTOD(aDados[nX][10])
+                ZZ1->ZZ1_VOL    := AllTrim(aDados[nX][11])
+                ZZ1->ZZ1_VLRCTR := VAL(STRTRAN(aDados[nX][12],",","."))
+                ZZ1->ZZ1_VLRDIS := VAL(STRTRAN(aDados[nX][13],",","."))
+                ZZ1->ZZ1_IDSUZ  := AllTrim(aDados[nX][14])
+                ZZ1->ZZ1_APOIO  := IF(AllTrim(aDados[nX][15]) == "Com apoio","1","2")
+            MsUnlock()
+
+            nTotGrv++ 
+
+        EndIf
+
+    Next nX
+    
+    If nTotGrv > 0
+
+        FWAlertSuccess("Foram importados " +cValtoChar(nTotGrv)+ " com sucesso!", "TKimberlySpreadsheetImport")
+
+    EndIf
+    
+
+Return 

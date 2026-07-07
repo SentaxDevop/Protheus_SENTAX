@@ -1,0 +1,186 @@
+//Bibliotecas
+#Include "Totvs.ch"
+
+/*/{Protheus.doc} User Function REST006
+	Extrai os dados dos saldos atuais dos produtos e gera os resultandos em em TXT
+	@author Alfred Christian Andersen
+	@since 23/09/2024
+	@version 1.0
+	@type function
+/*/
+
+User Function REST006()
+
+	Local aArea  := FWGetArea() as Array
+	Local aPergs := {}          as Array
+
+	Local xPar0 := Space(06)
+	Local xPar1 := Space(06)
+	Local xPar2 := Space(30)
+	Local xPar3 := Space(30)    
+	Local xPar4 := Space(4)
+	Local xPar5 := Space(4)
+	
+	//Adicionando os parametros do ParamBox
+	aadd(aPergs, {1, "Da Filial"    , xPar0, "", ".T.", "SM0_01", ".T.", LEN(xPar0), .F.})
+	aadd(aPergs, {1, "Até a Filial" , xPar1, "", ".T.", "SM0_01", ".T.", LEN(xPar1), .T.})
+	aadd(aPergs, {1, "Do Produto"   , xPar2, "", ".T.", "SB1"   , ".T.", 80        , .F.})
+	aadd(aPergs, {1, "Até o Produto", xPar3, "", ".T.", "SB1"   , ".T.", 80        , .T.})
+	aadd(aPergs, {1, "Do Grupo"     , xPar4, "", ".T.", "SBM "  , ".T.", LEN(xPar4), .F.})
+	aadd(aPergs, {1, "Até o Grupo"  , xPar5, "", ".T.", "SBM "  , ".T.", LEN(xPar5), .T.})
+
+	
+	//Se a pergunta for confirma, cria as definicoes do relatorio
+	If ParamBox(aPergs, 'Informe os parâmetros', /*aRet*/, /*bOk*/, /*aButtons*/, /*lCentered*/, /*nPosx*/, /*nPosy*/, /*oDlgWizard*/, /*cLoad*/, .F., .F.)
+		Processa({|| REST006A()})
+	EndIf
+	
+	FWRestArea(aArea)
+
+Return
+
+/*/{Protheus.doc} REST006A
+	Preenchimento de dados no arquivo - REST006
+	@author Alfred Christian Andersen
+	@since 23/09/2024
+	@version 1.0
+	@type function
+/*/
+
+Static Function REST006A()
+
+	Local aArea    := FWGetArea()             as Array
+	Local nAtual   := 0                       as Numeric
+	Local nTotal   := 0                       as Numeric
+	Local cArquivo := 'COMPARACAOESTOQUE.csv' as Character
+	Local cPasta   := ""                      as Character
+	Local cQryExp  := ""                      as Character
+	Local oFWriter                            as Object
+	Local cAlias   := GetNextAlias()          as Character
+	
+	cPasta := REST006B()
+
+	If Empty(cPasta)
+		Return
+	End
+
+	//Se o último caracter não for uma barra, será uma barra
+	If SubStr(cPasta, Len(cPasta), 1) != '\'
+		cPasta += '\'
+	EndIf
+	
+	//Montando consulta de dados
+	cQryExp += " SELECT B2_FILIAL, B1_COD, B1_DESC, SUM(B2_QATU) QTD  "	                   				+ CRLF
+	cQryExp += " FROM " + RetSQLName("SB2") + " SB2 " 		                            				+ CRLF
+    cQryExp += " INNER JOIN " + RetSqlName("SB1") + " SB1 ON "                             				+ CRLF
+    cQryExp += "    B1_COD = B2_COD  "                                    								+ CRLF
+    cQryExp += "    AND B1_GRUPO BETWEEN '" + Alltrim(MV_PAR05) + "' AND '" +Alltrim(MV_PAR06) + "' " 	+ CRLF
+    cQryExp += "    AND SB1.D_E_L_E_T_ = ' ' "                                              			+ CRLF
+	cQryExp += " WHERE B2_FILIAL BETWEEN '" + Alltrim(MV_PAR01) + "' AND '" + Alltrim(MV_PAR02) + "' " 	+ CRLF
+	cQryExp += "    AND B2_COD BETWEEN '" + Alltrim(MV_PAR03) + "' AND '" + Alltrim(MV_PAR04) + "'"		+ CRLF
+	cQryExp += "    AND B2_LOCAL = '01' "		                                    					+ CRLF	
+	cQryExp += "    AND B2_QATU >= 0	"		                                    					+ CRLF
+	cQryExp += "    AND SB2.D_E_L_E_T_ = '' "		                                    				+ CRLF
+	cQryExp += " GROUP BY B2_FILIAL, B1_COD, B1_DESC "		                               				+ CRLF
+	cQryExp += " ORDER BY B2_FILIAL, B1_COD, B1_DESC"		                               				+ CRLF
+	
+	//Chama a criação do arquivo
+	oFWriter := FWFileWriter():New(cPasta + cArquivo, .T.)
+	
+	//Se houve falha ao criar, mostra a mensagem
+	If ! oFWriter:Create()
+		FWAlertError('Houve um erro ao gerar o arquivo: ' + CRLF + oFWriter:Error():Message, 'Atenção')
+		
+	//Senão, continua com o processamento
+	Else
+		//Executando consulta e setando o total da regua
+		PlsQuery(cQryExp, cAlias)
+		DbSelectArea(cAlias)
+		Count To nTotal
+		ProcRegua(nTotal)
+		(cAlias)->(DbGoTop())
+		
+		//Enquanto houver dados
+		While ! (cAlias)->(EoF())
+
+			//Incrementando a régua
+			nAtual++
+			IncProc('Adicionando registro ' + cValToChar(nAtual) + ' de ' + cValToChar(nTotal) + '...')
+			
+			//Monta a linha que será escrita
+			cLinha := ''
+
+			//Posição 1
+			cLinha += '1'
+			
+			//Posição 2
+			cLinha += ';' + Alltrim((cAlias)->B1_COD)
+			
+			//Posição 3
+			cLinha += ';' + Alltrim((cAlias)->B1_DESC)
+
+			//Posição 4
+			cLinha += ';' + Alltrim(Transform((cAlias)->QTD,"@E 99999999999.99"))
+			
+			//Posições 5 a 8
+			cLinha += ';0;0;0;0'
+
+			//Escreve a linha com a quebra do CRLF no fim
+			oFWriter:Write(cLinha + CRLF)
+			
+			(cAlias)->(DbSkip())
+
+		EndDo
+
+		(cAlias)->(DbCloseArea())
+		
+		//Encerra o arquivo
+		oFWriter:Close()
+		
+		//Pergunta se deseja abrir o arquivo
+		If FWAlertYesNo('Arquivo gerado com sucesso (' + cPasta + cArquivo + ')!' + CRLF + 'Deseja abrir?', 'Atencao')
+			ShellExecute('OPEN', cArquivo, '', cPasta, 1 )
+		EndIf
+	EndIf
+	
+	FWRestArea(aArea)
+Return
+
+/*/{Protheus.doc} REST006B
+	Realiza a pesquisa da pasta a ser saldo o arquivo
+	@type function
+	@version 1.0
+	@author Alfred Andersen
+	@since 9/26/2024
+	/*/
+Static Function REST006B()
+
+    Local aArea   := FWGetArea()                            as Array
+    Local cDirIni := GetTempPath()                          as Character
+    Local cTipArq := ""                                     as Character
+    Local cTitulo := "Seleção de Pasta para Salvar arquivo" as Character
+    Local lSalvar := .F.                                    as Logical
+    Local cPasta  := ""                                     as Character
+ 
+    //Se não estiver sendo executado via job
+    If ! IsBlind()
+ 
+        //Chama a função para buscar arquivos
+        cPasta := tFileDialog(;
+            cTipArq,;                  // Filtragem de tipos de arquivos que serão selecionados
+            cTitulo,;                  // Título da Janela para seleção dos arquivos
+            ,;                         // Compatibilidade
+            cDirIni,;                  // Diretório inicial da busca de arquivos
+            lSalvar,;                  // Se for .T., será uma Save Dialog, senão será Open Dialog
+            GETF_RETDIRECTORY;         // Se não passar parâmetro, irá pegar apenas 1 arquivo; Se for informado GETF_MULTISELECT será possível pegar mais de 1 arquivo; Se for informado GETF_RETDIRECTORY será possível selecionar o diretório
+        )
+ 
+        If Empty(cPasta)
+            FWAlertError("[REST006 - 01] - Nenhuma pasta foi selecionada. A rotina será encerrada! ", "SENTAX")
+        EndIf
+
+    EndIf
+ 
+    FWRestArea(aArea)
+
+Return cPasta

@@ -1,0 +1,24 @@
+#INCLUDE "totvs.ch"
+
+/*/{Protheus.doc} TK271FIL
+    Filtro do browse da rotina de Atendimento no Call Center
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 7/22/2024
+/*/
+User Function TK271FIL(cAlias)
+
+    Local cFilter := "" as Character
+
+    If GetNewPar("ST_FILSUA",.T.)
+
+        If !( __cUserID $ GetNewPar("ST_USR271","000000|000441|000217") )
+
+            cFilter := "SUA->UA_OPERADO == '" + GetAdvFVal('SU7','U7_COD', xFilial('SU7') + __cUserID,4,'') + "'
+
+        End
+
+    End
+
+Return cFilter

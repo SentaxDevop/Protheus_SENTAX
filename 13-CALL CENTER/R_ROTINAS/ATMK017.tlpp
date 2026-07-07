@@ -1,0 +1,92 @@
+#include "topconn.ch"
+
+/*/{Protheus.doc} ATMK017
+	Realiza a inclusão do Produto x Equipamento e chama a rotina de Chamado Técnico
+	@type function
+	@version 1.0
+	@author Alfred Andersen
+	@since 2/24/2025
+/*/
+User Function ATMK017(nOpc)
+
+    Local nX          := 0               as Numeric
+	Local cObs        := ""              as Character
+	Local cCliente    := SUA->UA_CLIENTE as Character
+	Local cLoja       := SUA->UA_LOJA    as Character
+	Local cProduto    := ""              as Character
+	Local cProdDescri := ""              as Character
+	Local aCab040     := {}              as Array
+	Local aItens040   := {}              as Array
+	Local aChamado    := {}              as Array
+
+	Private lMsErroAuto := .F.
+
+	If FWAlertYesNo("Deseja abrir o chamado neste momento?", "Chamado Técnico")
+		
+		//Atendimento
+		If nOpc <> "3"
+
+			If Len(aDadosSUB) > 0
+
+				For nX := 1 to len(aDadosSUB)
+
+					cObs := 	"Inclusão Automática da Base de Atendimento pelo Call Center"+CHR(13)+CHR(10)+;
+					"Atendimmento: "+Alltrim(SUA->UA_NUM)+" Data: "+DtoC(dDataBase)+" e Hora: "+Time()
+
+					cProduto := aDadosSUB[nX, 1]
+					cProdDescri := Alltrim(GetAdvFVal("SB1","B1_DESC",FWxFilial("SB1") + aDadosSUB[nX, 1],1))
+					cConteud := GetMV("MV_FORMGAR")
+
+					DbSelectArea("AA3") 
+					AA3->(DbSetOrder(1)) // AA3_FILIAL+AA3_CODCLI+AA3_LOJA+AA3_CODPRO+AA3_NUMSER
+					If !AA3->(DbSeek(xFilial("AA3") + cCliente + cLoja + cProduto))
+
+						aadd(aCab040, {"AA3_FILIAL", FWxFilial("AA3")                             , NIL})
+						aadd(aCab040, {"AA3_CODCLI", cCliente                                     , NIL})
+						aadd(aCab040, {"AA3_LOJA"  , cLoja                                        , NIL})
+						aadd(aCab040, {"AA3_CODPRO", aDadosSUB[nX, 1]                             , NIL})
+						aadd(aCab040, {"AA3_NUMSER", Alltrim(cCliente) + cLoja + Alltrim(cProduto), NIL})
+						aadd(aCab040, {"AA3_DTVEN" , dDataBase                                    , NIL})
+
+						aadd(aCab040, {"AA3_DTGAR" , &(cConteud)                                  , NIL})
+						aadd(aCab040, {"AA3_NFVEND", "ZZZZZZZZZ"                                  , NIL})
+						aadd(aCab040, {"AA3_HORDIA", GetNewPar("MV_HOPEDIA", 8)                   , NIL})
+						aadd(aCab040, {"AA3_STATUS", "01"                                         , NIL})
+						aadd(aCab040, {"AA3_DIAOPE", GetNewPar("MV_DOPESEM", 5)                   , NIL})
+
+						aadd(aCab040, {"AA3_DSCPRO", cProdDescri                                  , NIL})
+						aadd(aCab040, {"AA3_CODFAB", cCliente                                     , NIL})
+						aadd(aCab040, {"AA3_LOJAFA", cLoja                                        , NIL})
+						aadd(aCab040, {"AA3_OBS"   , cObs                                         , NIL})
+
+						TECA040(,aCab040,aItens040,3) 
+
+						If lMsErroAuto   
+
+							MsgAlert("Erro ao incluir base instalada para o Cliente/Loja: "+cCliente+"/"+cLoja+ "e Produto: "+cProduto,"Atenção [PE TMKVFIM]")				
+
+						Endif 
+
+					End
+
+				Next
+
+			End
+
+		End
+	
+		//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+		//³Chama a tela de inclusao do chamado tecnico³
+		//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+		SA1->(DbSetOrder(1))
+		SA1->(DbSeek(FWxFilial("SA1") + SUA->UA_CLIENTE + SUA->UA_LOJA))
+
+		Aadd(aChamado,{"AB1_CODCLI",SUA->UA_CLIENTE})
+		Aadd(aChamado,{"AB1_LOJA"  ,SUA->UA_LOJA})
+		Aadd(aChamado,{"AB1_CONTAT",SUA->UA_DESCNT})
+
+		TECA300("At300Inclu",aChamado)
+
+	End
+Return

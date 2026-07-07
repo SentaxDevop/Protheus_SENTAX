@@ -1,0 +1,15 @@
+#INCLUDE "PROTHEUS.CH"
+#INCLUDE "FWMVCDEF.CH"
+
+/*/{Protheus.doc} MTA070MNU
+    Inclusão de botões na rotina de Bancos
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 12/9/2024
+/*/
+User Function MTA070MNU()
+
+ADD OPTION aRotina TITLE "Banco x Boleto"    ACTION 'U_AFIN004' OPERATION 13   ACCESS 0
+
+Return NIL

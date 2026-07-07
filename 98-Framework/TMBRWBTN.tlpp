@@ -1,0 +1,79 @@
+#INCLUDE "PROTHEUS.CH"
+#INCLUDE "TOPCONN.CH"
+
+/*/{Protheus.doc} TMBRWBTN
+	@author Alfred Andersen
+	@since 14/06/2022
+	@version 1.0
+	@description    -> Classe do PE TMBRWBTN.
+	@totvsDescription   -> Ponto de entrada para validação de acesso - CUIDADO - Utilizado em todas as MBROWSE.
+	@Transacion     -> NÃO.
+	@Return logical, Permite a operação 
+	@type Class
+/*/
+
+Class TMBRWBTN
+
+	Public Method New() Constructor
+	Public Method Processa()
+
+	Public Method Validate_TMKA271()	
+
+EndClass
+
+Method New() Class TMBRWBTN
+
+Return(Self)
+
+Method Processa() Class TMBRWBTN
+
+	Local lRet := .T.
+
+	//lRet := ::Validate_TMKA271()
+
+	If lRet
+
+		// Penso em gravar aqui os acessos para termos o numero de acesso as rotinas.
+
+	EndIf
+
+Return(lRet)
+
+
+/*/{Protheus.doc} TMBRWBTN::Validate_TMKA271
+Call Center - Atendimento
+@type method
+@version 1.0
+@author Alfred Andersen
+@since 7/22/2024
+/*/
+Method Validate_TMKA271() Class TMBRWBTN
+
+	Local lRet     := .T.              as Logical
+	Local _lAltera := Paramixb[3] == 4 as Logical
+
+	If FWIsInCallStack("TMKA271") .And. _lAltera .And. !Empty(SUA->UA_NUMSC5)
+
+		SC5->(DbSetOrder(1))
+		SC5->(DbGoTop())
+		IF SC5->(DbSeek(SUA->UA_FILIAL+SUA->UA_NUMSC5))
+
+			If SC5->C5_XSTAWMS <> "R" .And. !Empty(SC5->C5_XSTAWMS)
+				
+				If IsBlind()
+					cLogTxt := "[TMBRWBTN - 01] - Atendimento com faturamento já iniciado. Alteração não permitida!"
+					Conout(cLogTxt)		
+				Else
+					Help( NIL, NIL,"[TMBRWBTN - 01]", NIL, "Atendimento com faturamento já iniciado.", 1, 0, NIL, NIL, NIL, NIL, NIL, {"Realize o alinhamento com a Expedição"})
+				End
+
+				lRet := .F.
+
+			End
+
+		EndIf  
+
+	EndIf
+
+Return(lRet)
+

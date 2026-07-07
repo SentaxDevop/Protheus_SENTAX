@@ -1,0 +1,24 @@
+#include "rwmake.ch"
+#include "TbiConn.ch"
+#Include "TOTVS.ch"
+
+/*/{Protheus.doc} M242D3IN
+    Será executado após a gravação do registro "RE7" 
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 8/18/2025
+/*/
+User Function M242D3IN() 
+
+    Local lCyberlog := GetNewPar("ST_INTWMS",.T.) as Logical
+
+    If lCyberlog .And. cFilAnt == '020201'
+
+        RecLock("SD3",.F.)
+            SD3->D3_XINTEG := "N"
+        SD3->(MsUnLock())
+        
+    End
+
+Return Nil

@@ -1,0 +1,141 @@
+/*/{Protheus.doc} AFAT007
+    Realiza a atualização do custo dos produtos de todas as tabelas de preço, baeando-se no preço da tabela padrão
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 11/08/2023
+    @requester Kleber Moro
+    @consultancy Harpia
+    @site www.harpiaconsultoria.com
+/*/
+User Function AFAT007
+
+    Local nRetorno        as Numeric
+    Local cMensagem       as Character
+    Local lRet            as Logical
+
+    Private cTabelaPadrao as Character
+
+    cTabelaPadrao := GETMV("MV_TABMIN")
+    nRetorno      := 0
+    cMensagem     := "Este processo realizará a atualização do preço de custo de todas as tabelas de preço, baseando-se no preço de venda da tabela padrão nº "+cTabelaPadrao
+    lRet          := .F.
+
+    nRetorno := Aviso( "Atualiza custo das tabelas de preço", cMensagem, {"Confirmar","Encerrar"}, 2, "[AFAT007 - 01]")
+
+    If nRetorno == 1
+
+
+        FWMsgRun(, {|oSay| lRet := AFAT007A(oSay) }, "Processando", "Atualização em processamento...")
+
+
+    	If lRet
+
+            FWAlertSuccess("[AFAT007 - 03] Atualizações realizadas com sucesso!", "SENTAX")
+
+        Else
+            
+            FWAlertHelp("[AFAT007 - 04] Não foram encontrados registrso aptos para serem atualizados.", "Verifique se a tabela de preço do parâmetro MV_TABMIN existe ou está ativa.")
+
+        End
+
+    Else
+
+        FWAlertInfo("[AFAT007 - 02] Alterações não confirmadas.", "SENTAX")
+        
+    End
+
+Return
+
+/*/{Protheus.doc} AFAT007A
+Executa a alteração do preço de custo de todas as tabelas 
+@type function
+@version 1.0
+@author Alfred Andersen
+@since 11/08/2023
+@param oSay, object, atualiza o FWMsgRun
+@return logical, informa se processou ou não a atualização
+/*/
+Static Function AFAT007A(oSay)
+
+    Local cAliasPadrao   as Character
+    Local cAliasAuxiliar as Character
+    Local cProduto       as Character
+    Local nPreco         as Numeric
+    Local lRet           as Logical
+
+    cAliasPadrao   := GetNextAlias()
+    cAliasAuxiliar := GetNextAlias()
+    cProduto       := ""
+    nPreco         := 0
+    lRet           := .F.
+
+    If Select(cAliasPadrao) > 0
+        dbSelectArea(cAliasPadrao)
+        dbCloseArea()
+    Endif
+
+    BeginSql Alias cAliasPadrao
+        SELECT 
+            DA1_CODPRO, DA1_PRCVEN
+        FROM 
+            %Table:DA1% DA1 (NOLOCK)
+        WHERE DA1.%notdel% 
+            AND DA1_FILIAL = %xFilial:DA1%
+            AND DA1_CODTAB = %Exp:cTabelaPadrao%
+            AND DA1_ATIVO = '1'
+            ORDER BY DA1_ITEM
+    EndSql
+
+    If (cAliasPadrao)->(!Eof())
+        
+        While (cAliasPadrao)->(!Eof())
+
+            oSay:SetText("Atualizando custo do produto: " + Alltrim((cAliasPadrao)->DA1_CODPRO) )//+" - "+ GetAdvFVal("SB1","B1_DESC",xFilial("SB1")+(cAliasPadrao)->DA1_CODPRO,1))
+
+            cAliasAuxiliar := GetNextAlias()
+            cProduto       := (cAliasPadrao)->DA1_CODPRO
+            nPreco         := (cAliasPadrao)->DA1_PRCVEN
+
+            If Select(cAliasAuxiliar) > 0
+                dbSelectArea(cAliasAuxiliar)
+                dbCloseArea()
+            Endif
+
+            BeginSql Alias cAliasAuxiliar
+                SELECT 
+                    R_E_C_N_O_ RECDA1
+                FROM 
+                    %Table:DA1% DA1 (NOLOCK)
+                WHERE DA1.%notdel% 
+                    AND DA1_FILIAL = %xFilial:DA1%
+                    AND DA1_CODPRO = %Exp:cProduto%
+                    AND DA1_ATIVO = '1'
+                    ORDER BY DA1_CODTAB
+            EndSql
+
+            If (cAliasAuxiliar)->(!Eof())
+                
+                While (cAliasAuxiliar)->(!Eof())
+
+                    DA1->(DbGoto((cAliasAuxiliar)->RECDA1))
+
+                    RECLOCK( "DA1", .F. )
+                        DA1->DA1_CUSTO := nPreco    
+                    DA1->(MSUNLOCK())
+
+                    (cAliasAuxiliar)->(DbSkip())
+                End
+
+                (cAliasAuxiliar)->(dbCloseArea()) 
+            End
+
+            (cAliasPadrao)->(DbSkip())
+        End
+        
+        lRet := .T.
+    End
+
+    (cAliasPadrao)->(dbCloseArea()) 
+
+Return lRet

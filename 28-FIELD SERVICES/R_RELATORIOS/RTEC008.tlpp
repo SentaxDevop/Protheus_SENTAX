@@ -1,0 +1,352 @@
+#INCLUDE "PROTHEUS.CH"
+#INCLUDE "TOPCONN.CH"
+#INCLUDE "TBICONN.CH" 
+#INCLUDE "DIRECTRY.CH"    
+#INCLUDE "FILEIO.CH"  
+#INCLUDE "AP5MAIL.CH"      
+#DEFINE CRLF (chr(13)+chr(10)) 
+
+
+/*/{Protheus.doc} RTEC008
+    Workflow de Chamados Técnicos
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/31/2025
+/*/
+User Function RTEC008(aPars)
+
+	DEFAULT aPars := {"01", "020201"}
+
+    Conout(Replicate("-",60))
+    ConOut("[RTEC008] Schedule Iniciado: "+DtoC(Date())+" "+Time() )
+    Conout(Replicate("-",60))
+
+	RpcClearenv()
+
+	RpcSetType( 3 )
+	RpcSetEnv( aPars[1], aPars[2] )
+
+    
+	RTEC008A( dDataBase )
+	
+	RpcClearEnv()
+
+    Conout(Replicate("-",60))
+    ConOut("[RTEC008] Schedule Finalizado: "+DtoC(Date())+" "+Time() )
+    Conout(Replicate("-",60))
+
+Return  
+
+/*/{Protheus.doc} RTEC008A
+    Gera o arquivo HTML para envio por e-mail
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/31/2025
+/*/
+Static Function RTEC008A( dDataAtu)
+
+    Local cHtml     := ""
+    Local cDirHtm   := "\temp\"
+    Local cArqHtm   := ""
+    Local cAlias    := GetNextAlias()
+    Local cVendedor := ""
+    Local aMails    := {}
+    Local nX        := 0
+
+    MontaDir(cDirHtm) // Cria o diretorio se não existir
+            
+    If Select(cAlias) <> 0
+        DbSelectArea(cAlias)
+        (cAlias)->(DbCloseArea())
+    EndIf 
+
+    BeginSql Alias cAlias
+        SELECT
+            A1_VEND, 
+            A3_NOME, 
+            A3_EMAIL, 
+            AB6_CODCLI, 
+            AB6_LOJA, 
+            A1_NOME,
+            ABB_NUMOS, 
+            ABB_DTINI,
+            AA1_NOMTEC
+        FROM
+            %Table:ABB% ABB
+        INNER JOIN %Table:AA1% AA1 ON AA1.%NotDel%
+            AND AA1_CODTEC = ABB_CODTEC
+        INNER JOIN %Table:AB6% AB6 ON AB6.%NotDel%
+            AND ABB_FILIAL = AB6_FILIAL
+            AND ABB_NUMOS = AB6_NUMOS
+        INNER JOIN %Table:SA1% SA1 ON SA1.%NotDel%
+            AND A1_COD = AB6_CODCLI 
+            AND A1_LOJA = AB6_LOJA 
+        INNER JOIN %Table:SA3% SA3 ON SA3.%NotDel%
+            AND A3_COD = A1_VEND
+        WHERE
+            ABB.%NotDel%
+            AND ABB_FILIAL  = %xFilial:ABB%
+            AND ABB_DTINI   = %Exp:DTOS(dDataBase)%
+        ORDER BY 
+            A1_VEND, ABB_DTINI
+    EndSql
+
+    If ( (cAlias)->(!EoF()) )
+
+        cVendedor := ""
+                
+        While !(cAlias)->(EOF())
+        
+
+            If cVendedor <> (cAlias)->A1_VEND
+
+                If !Empty(cVendedor)
+
+                    cHtml := '</table>'+CRLF
+
+                    cHtml += RTEC008C()  
+
+                    RTEC008B( cDirHtm, cArqHtm, cHtml )
+
+                End
+
+                cVendedor := (cAlias)->A1_VEND
+
+                cArqHtm := "CHAMADOS_ABERTOS_VENDEDOR_" + Alltrim(cVendedor) + "_" + DTOS(dDataBase)+"_"+StrTran(Time(),":")+".HTML" 
+
+                RTEC008B( cDirHtm, cArqHtm, cHtml )
+
+                aAdd(aMails,{cDirHtm, cArqHtm, (cAlias)->A3_NOME,(cAlias)->A3_EMAIL})
+
+                cHtml := RTEC008D() 
+
+                //cHtml += '<h3>CHAMADOS TÉCNICOS ABERTOS EM '+DTOC(dDataBase)+'</h3>'
+
+                cHtml += '<table>'+CRLF 
+                cHtml += fCabTab() 
+                
+                RTEC008B( cDirHtm, cArqHtm, cHtml )
+            End
+                   
+            cHtml := '  <tr>'+CRLF 					
+            cHtml += '    <td>'+(cAlias)->AB6_CODCLI+'</td>'+CRLF 		// Num.Os.
+            cHtml += '    <td>'+(cAlias)->AB6_LOJA+'</td>'+CRLF	   		// Cliente	
+            cHtml += '    <td>'+(cAlias)->A1_NOME+'</td>'+CRLF   		// Nome do Cliente 
+            cHtml += '    <td>'+(cAlias)->ABB_NUMOS+'</td>'+CRLF   	   			// Status 
+            cHtml += '    <td>'+DtoC(StoD((cAlias)->ABB_DTINI))+'</td>'+CRLF   	 			// Municipo
+            cHtml += '    <td>'+(cAlias)->AA1_NOMTEC+'</td>'+CRLF 	   			// UF	
+            cHtml += '  </tr>'+CRLF 
+            
+            RTEC008B( cDirHtm, cArqHtm, cHtml ) 
+                        
+            (cAlias)->(dbSkip())
+            
+        EndDo 
+        
+        cHtml := '</table>'+CRLF
+                
+    EndIf 
+
+
+    If !Empty(cVendedor)
+
+        cHtml := '</table>'+CRLF
+
+        cHtml += RTEC008C()  
+
+        RTEC008B( cDirHtm, cArqHtm, cHtml )
+
+    End
+       
+    RTEC008E( aMails)
+
+    (cAlias)->(DbCloseArea()) 
+        
+    Sleep(3000) 
+
+    For nX := 1 to Len(aMails)
+        FERASE( cDirHtm + cArqHtm )
+    Next
+ 
+Return
+
+/*/{Protheus.doc} RTEC008E
+    Rotina reenviar inventário da Roche para o webService
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/31/2025
+/*/
+Static Function RTEC008E( aData )
+
+    Local _cServer   := Alltrim(GetMV("MV_RELSERV",,""))
+    Local _cAccount  := Alltrim(GetMV("MV_RELACNT",,""))
+    Local _cPassword := Alltrim(GetMV("MV_RELPSW",,""))
+    Local _cEnvia    := Alltrim(GetMV("MV_RELFROM",,""))
+    Local cMail      := ""
+    Local cMailCco   := GetMV("ST_MAILTI")
+    Local lConectou  := .F.
+    Local cBody      := ""
+    Local _cAssunto  := ""
+    Local nX         := 0
+
+    //cMail := GetMV("ST_MAILTI")
+
+    For nX := 1 to Len(aData)
+
+        _cAssunto  	:= "Chamados Técnicos em Aberto - "+ DTOC(dDataBase) + " - Vendedor: " + Alltrim(aData[nX][3])
+
+        cBody := '<html>'
+        cBody += '<head>'
+        cBody += '<style>'
+        cBody += 'body {'
+        cBody += '  font-family: "Calibri", sans-serif;'
+        cBody += '	}'
+        cBody += 'p 	{'
+        cBody += '	font-family: "Calibri", sans-serif;'
+        cBody += '	font-size: 14px;'
+        cBody += '	}'
+        cBody += '</style>'
+        cBody += '</head>'
+        cBody += '<body>'
+        cBody += '<h2>'+_cAssunto+'.</h3>' 
+        cBody += '<br><br><br><br>'
+        cBody += '<p>ATENÇÃO! Esta mensagem foi enviada por um sistema automático. Por favor, não responda a este e-mail diretamente..</p>'
+        cBody += '</body>'
+        cBody += '</html>'
+
+        cMail     := Alltrim(aData[nX][4])
+        lConectou := .F.
+        cAnexo    := aData[nX][1] + aData[nX][2]
+
+        If !lConectou
+            CONNECT SMTP SERVER _cServer ACCOUNT _cAccount PASSWORD _cPassword Result lConectou
+        EndIf
+
+        While !lConectou
+            CONNECT SMTP SERVER _cServer ACCOUNT _cAccount PASSWORD _cPassword Result lConectou
+        End
+
+        If lConectou
+            mailauth(_cAccount, _cPassword)
+            SEND MAIL FROM _cEnvia TO cMail BCC cMailCco SUBJECT _cAssunto BODY cBody ATTACHMENT cAnexo RESULT lEnvioOk
+            If !lEnvioOk
+                If !IsBlind()
+                    MostraErro()
+                Else
+                    Conout(Replicate("[ERRO] - Falha no envio do e-mail - Workflow de Chamados Técnicos ",60))
+                End 
+            EndIf
+            
+            If lConectou
+                DISCONNECT SMTP SERVER
+            EndIf
+        EndIf
+
+    Next
+
+Return
+
+/*/{Protheus.doc} RTEC008D
+    Monta o cabeçalho do HTML
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/31/2025
+/*/
+Static Function RTEC008D( cDataPos ) 
+
+    Local cHtml := ""
+
+    cHtml += '<html>'+CRLF
+    cHtml += '<head>'+CRLF
+    cHtml += '<style>'+CRLF
+    cHtml += 'body {'+CRLF
+    cHtml += '    font-family: "Calibri", sans-serif;'+CRLF
+    cHtml += '}'+CRLF
+    cHtml += 'table {'+CRLF
+    cHtml += '    font-family: "Calibri", sans-serif;'+CRLF
+    cHtml += '    border-collapse: collapse;'+CRLF
+    cHtml += '    width: 100%;'+CRLF
+    cHtml += '}'+CRLF
+    cHtml += 'td, th {'+CRLF
+    cHtml += '    border: 1px solid #dddddd;'+CRLF
+    cHtml += '    text-align: left;'+CRLF
+    cHtml += '    padding: 8px;'+CRLF
+    cHtml += '}'+CRLF
+    cHtml += 'tr:nth-child(even) {'+CRLF
+    cHtml += '    background-color: #dddddd;'+CRLF
+    cHtml += '}'+CRLF
+    cHtml += '</style>'+CRLF
+    cHtml += '</head>'+CRLF
+    cHtml += '<body>'+CRLF    
+    cHtml += '<h2>AGENDA DOS TECNICOS - INICIADAS EM ' +DTOC(dDataBase)+ '</h2>'+CRLF 
+
+Return cHtml
+
+/*/{Protheus.doc} fCabTab
+    Monta o cabeçalho da tabela do HTML
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/31/2025
+/*/
+Static Function fCabTab()
+
+    Local cCabTab := ""   
+
+    cCabTab += '  <tr>'+CRLF
+    cCabTab += '    <th width="05%" align="left">Cliente</th>'+CRLF
+    cCabTab += '    <th width="05%" align="left">Loja</th>'+CRLF
+    cCabTab += '    <th width="18%" align="left">Nome</th>'+CRLF
+    cCabTab += '    <th width="05%" align="left">Código O.S.</th>'+CRLF
+    cCabTab += '    <th width="05%" align="left">Data Início</th>'+CRLF
+    cCabTab += '    <th width="10%" align="left">Técnico</th>'+CRLF
+    cCabTab += '  </tr>'+CRLF
+
+Return cCabTab 
+
+/*/{Protheus.doc} RTEC008C
+    Monta o rodapé do HTML
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/31/2025
+/*/
+Static Function RTEC008C() 
+
+    Local cHtml := ""
+
+    cHtml += '</body>'+CRLF
+    cHtml += '</html>'+CRLF
+
+Return cHtml     
+
+/*/{Protheus.doc} RTEC008B
+    Grava conteudo do HTML
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/31/2025
+/*/
+Static Function RTEC008B( cDirHtm, cArqHtm, cHtml )
+ 
+    Local nHandle := 0 
+
+    If File( cDirHtm + cArqHtm ) 
+        nHandle := fOpen( cDirHtm + cArqHtm, FO_READWRITE+FO_SHARED ) 
+    Else
+        nHandle := FCreate( cDirHtm + cArqHtm ) 
+    EndIf 
+
+    If nHandle == -1   
+        Conout("[RTEC007]"+"Não foi possível abrir ou criar o arquivo: " + cArqHtm )			
+    Else  	
+        FSeek(nHandle,0,2)
+        FWrite(nHandle, cHtml)   
+        FClose(nHandle)
+    EndIf								
+ 
+Return 

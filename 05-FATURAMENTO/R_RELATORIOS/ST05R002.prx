@@ -1,0 +1,1277 @@
+#INCLUDE "MATR550.CH" 
+#INCLUDE "Protheus.CH"
+
+/*ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±
+±±ÚÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄ¿±±
+±±³Programa  ³ MATR550  ³ Autor ³ Marco Bianchi         ³ Data ³ 05/06/06 ³±±
+±±ÃÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄ´±±
+±±³Descri‡…o ³ Relacao de Notas Fiscais                                   ³±±
+±±ÃÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´±±
+±±³Uso       ³ SIGAFAT - R4                                               ³±±
+±±ÀÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ±±
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±
+ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß*/
+User Function ST05R002()
+
+Local oReport
+
+
+	//-- Interface de impressao
+	oReport := ReportDef()
+	oReport:PrintDialog()
+
+Return
+
+/*ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±
+±±ÚÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄ¿±±
+±±³Programa  ³ReportDef ³ Autor ³ Marco Bianchi         ³ Data ³05/06/06  ³±±
+±±ÃÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄ´±±
+±±³Descri‡…o ³A funcao estatica ReportDef devera ser criada para todos os ³±±
+±±³          ³relatorios que poderao ser agendados pelo usuario.          ³±±
+±±³          ³                                                            ³±±
+±±ÃÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´±±
+±±³Retorno   ³ExpO1: Objeto do relatório                                  ³±±
+±±ÃÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´±±
+±±³Parametros³Nenhum                                                      ³±±
+±±³          ³                                                            ³±±
+±±ÃÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´±±
+±±³   DATA   ³ Programador   ³Manutencao efetuada                         ³±±
+±±ÃÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´±±
+±±³          ³               ³                                            ³±±
+±±ÀÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ±±
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±
+ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
+/*/
+Static Function ReportDef()
+
+Local oReport,oSintetico,oItens,oItensD1,oItensD2,oCabec,oCabecF1,oCabecF2,oTotDia
+Local cAliasQry := GetNextAlias()
+Local cNota 	:= ""
+Local cSerie 	:= ""
+Local nAcN1  	:= 0, nAcN2 := 0, nAcN3 := 0, nAcN4 := 0, nAcN5 := 0, nAcN6 := 0, nVlrISS := 0, nFretAut := 0
+Local cCod		:= ""
+Local cDesc		:= ""
+Local cPedido	:= ""
+Local cItem		:= ""
+Local cRemito	:= ""
+Local cItemrem	:= ""
+
+Local nQuant	:= 0
+Local nPrcVen	:= 0
+Local nValadi	:= 0
+Local cLocal	:= ""
+Local cCF		:= ""
+Local cTes		:= ""
+
+Local cItemPV	:= ""
+Local nValIPI	:= 0
+Local nValIcm	:= 0
+Local nValISS	:= 0
+Local nDesAces	:= 0
+Local nTotGer	:= 0
+
+// Variaveis Base Localizacao
+Local cCliente 		:= ""
+Local cLoja			:= ""
+Local cNome			:= ""
+Local dEmissao 		:= CTOD("  /  /  ")
+Local cTipo    		:= ""
+Local nAcD1			:= 0
+Local nAcD2			:= 0
+Local nAcDImpInc	:= 0
+Local nAcDImpNoInc	:= 0
+Local nAcD3			:= 0
+Local nAcD4       	:= 0
+Local nAcD5       	:= 0
+Local nAcD6       	:= 0
+Local nAcD7       	:= 0
+Local nAcDAdi		:= 0
+Local nTotal 		:= 0
+Local nImpInc 		:= 0
+Local nImpnoInc 	:= 0
+Local nTotcImp  	:= 0
+
+Local nAcG1			:= 0
+Local nAcG2			:= 0
+Local nAcGAdi		:= 0
+Local nAcGImpInc	:= 0
+Local nAcGImpNoInc	:= 0
+Local nAcG3			:= 0
+Local nTotNeto		:= 0
+Local nTotNetGer	:= 0
+Local nIPIDesp 		:= 0
+Local nICMDesp 		:= 0
+
+Local nAcImpInc  	:= 0
+Local nAcImpNoInc	:= 0
+
+Local nTotDia		:= 0
+Local oResumo
+
+
+//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+//³Criacao do componente de impressao                                      ³
+//³                                                                        ³
+//³TReport():New                                                           ³
+//³ExpC1 : Nome do relatorio                                               ³
+//³ExpC2 : Titulo                                                          ³
+//³ExpC3 : Pergunte                                                        ³
+//³ExpB4 : Bloco de codigo que sera executado na confirmacao da impressao  ³
+//³ExpC5 : Descricao                                                       ³
+//³                                                                        ³
+//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+oReport := TReport():New("ST05R002",STR0030,"MTR550P9R1", {|oReport| ReportPrint(oReport,cAliasQry,oSintetico,oItens,oItensD1,oItensD2,oCabec,oCabecF1,oCabecF2,oTotDia,oResumo)},STR0031)  // "Relacao de Notas Fiscais"###"Este programa ira emitir a relacao de notas fiscais."
+oReport:SetLandscape(.T.) 
+
+Pergunte(oReport:uParam,.F.)
+//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+//³Criacao da secao utilizada pelo relatorio                               ³
+//³                                                                        ³
+//³TRSection():New                                                         ³
+//³ExpO1 : Objeto TReport que a secao pertence                             ³
+//³ExpC2 : Descricao da seçao                                              ³
+//³ExpA3 : Array com as tabelas utilizadas pela secao. A primeira tabela   ³
+//³        sera considerada como principal para a seção.                   ³
+//³ExpA4 : Array com as Ordens do relatório                                ³
+//³ExpL5 : Carrega campos do SX3 como celulas                              ³
+//³        Default : False                                                 ³
+//³ExpL6 : Carrega ordens do Sindex                                        ³
+//³        Default : False                                                 ³
+//³                                                                        ³
+//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+//³Criacao da celulas da secao do relatorio                                ³
+//³                                                                        ³
+//³TRCell():New                                                            ³
+//³ExpO1 : Objeto TSection que a secao pertence                            ³
+//³ExpC2 : Nome da celula do relatório. O SX3 será consultado              ³
+//³ExpC3 : Nome da tabela de referencia da celula                          ³
+//³ExpC4 : Titulo da celula                                                ³
+//³        Default : X3Titulo()                                            ³
+//³ExpC5 : Picture                                                         ³
+//³        Default : X3_PICTURE                                            ³
+//³ExpC6 : Tamanho                                                         ³
+//³        Default : X3_TAMANHO                                            ³
+//³ExpL7 : Informe se o tamanho esta em pixel                              ³
+//³        Default : False                                                 ³
+//³ExpB8 : Bloco de código para impressao.                                 ³
+//³        Default : ExpC2                                                 ³
+//³                                                                        ³
+//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+
+
+// Sintetico
+oSintetico := TRSection():New(oReport,STR0055,{"SF2","SD2"},/*{Array com as ordens do relatório}*/,/*Campos do SX3*/,/*Campos do SIX*/)
+oSintetico:SetTotalInLine(.F.)
+TRCell():New(oSintetico,"CNOTA"		,/*Tabela*/,RetTitle("D2_DOC")		,PesqPict("SD2","D2_DOC")		,TamSX3("D2_DOC")[1]	,/*lPixel*/,{|| cNota })
+TRCell():New(oSintetico,"CSERIE"	,/*Tabela*/,RetTitle("D2_SERIE")	,PesqPict("SD2","D2_SERIE")		,TamSX3("D2_SERIE")[1]	,/*lPixel*/,{|| cSerie })
+TRCell():New(oSintetico,"NACN1"		,/*Tabela*/,RetTitle("D2_QUANT")	,PesqPict("SD2","D2_QUANT")		,TamSX3("D2_QUANT")[1]	,/*lPixel*/,{|| nAcN1 },,,"RIGHT")
+TRCell():New(oSintetico,"NACN2"		,/*Tabela*/,STR0039					,PesqPict("SD2","D2_TOTAL")		,TamSX3("D2_TOTAL")[1]	,/*lPixel*/,{|| nAcN2 },,,"RIGHT")
+TRCell():New(oSintetico,"NACN5"		,/*Tabela*/,RetTitle("D2_VALIPI")	,PesqPict("SD2","D2_VALIPI")	,TamSX3("D2_VALIPI")[1]	,/*lPixel*/,{|| nAcN5 },,,"RIGHT")
+TRCell():New(oSintetico,"NACN4"		,/*Tabela*/,RetTitle("D2_VALICM")	,PesqPict("SD2","D2_VALICM")	,TamSX3("D2_VALICM")[1]	,/*lPixel*/,{|| nAcN4 },,,"RIGHT")
+TRCell():New(oSintetico,"NVLRISS"	,/*Tabela*/,RetTitle("D2_VALISS")	,PesqPict("SD2","D2_VALISS")	,TamSX3("D2_VALISS")[1]	,/*lPixel*/,{|| nVlrISS },,,"RIGHT")
+TRCell():New(oSintetico,"NDESPACES"	,/*Tabela*/,STR0032					,PesqPict("SD2","D2_TOTAL")		,TamSX3("D2_TOTAL")[1]	,/*lPixel*/,{|| nAcN3+nFretAut },,,"RIGHT")
+TRCell():New(oSintetico,"NACN6"		,/*Tabela*/,STR0033					,PesqPict("SD2","D2_TOTAL")		,TamSX3("D2_TOTAL")[1]	,/*lPixel*/,{|| nAcN6 },,,"RIGHT")
+
+
+
+// Analitico
+oCabec := TRSection():New(oReport,STR0056,{"SF2","SD2","SA1"},/*{Array com as ordens do relatório}*/,/*Campos do SX3*/,/*Campos do SIX*/)
+oCabec:SetTotalInLine(.F.)
+TRCell():New(oCabec,"F2_CLIENTE"	,/*Tabela*/,RetTitle("F2_CLIENTE")	,/*Picture*/,/*Tamanho*/,/*lPixel*/,{|| Substr(cCliente,1,6) })
+TRCell():New(oCabec,"F2_LOJA"		,/*Tabela*/,RetTitle("F2_LOJA")		,/*Picture*/,/*Tamanho*/,/*lPixel*/,{||  cLoja})
+TRCell():New(oCabec,"A1_NOME"		,/*Tabela*/,RetTitle("A1_NOME")		,/*Picture*/,/*Tamanho*/,/*lPixel*/,{|| cNome})
+TRCell():New(oCabec,"F2_EMISSAO"	,/*Tabela*/,RetTitle("F2_EMISSAO")	,/*Picture*/,/*Tamanho*/,/*lPixel*/,{||  dEmissao})
+TRCell():New(oCabec,"F2_TIPO"		,/*Tabela*/,RetTitle("F2_TIPO")		,/*Picture*/,/*Tamanho*/,/*lPixel*/,{||  cTipo })
+oItens := TRSection():New(oCabec,STR0057,{"SF2","SD2","SB1"},/*{Array com as ordens do relatório}*/,/*Campos do SX3*/,/*Campos do SIX*/)
+oItens:SetTotalInLine(.F.)
+TRCell():New(oItens,"CCOD"			,/*Tabela*/,STR0035,/*Picture*/					,TamSX3("D2_COD"	)[1]	,/*lPixel*/,{|| cCod			})
+TRCell():New(oItens,"CDESC"			,/*Tabela*/,STR0036,/*Picture*/					,TamSX3("B1_DESC"	)[1]	,/*lPixel*/,{|| cDesc			})
+TRCell():New(oItens,"NQUANT"		,/*Tabela*/,STR0037,PesqPict("SD2","D2_QUANT")	,TamSX3("D2_QUANT"	)[1]	,/*lPixel*/,{|| nQuant			},,,"RIGHT")
+TRCell():New(oItens,"NPRCVEN"		,/*Tabela*/,STR0038,PesqPict("SD2","D2_PRCVEN")	,TamSX3("D2_PRCVEN"	)[1]	,/*lPixel*/,{|| nPrcVen			},,,"RIGHT")
+TRCell():New(oItens,"NTOTAL"		,/*Tabela*/,STR0039,PesqPict("SD2","D2_TOTAL")	,TamSX3("D2_TOTAL"	)[1]	,/*lPixel*/,{|| nTotal			},,,"RIGHT")
+TRCell():New(oItens,"CLOCAL"		,/*Tabela*/,STR0040,PesqPict("SD2","D2_LOCAL") ,TamSX3("D2_LOCAL"  )[1]	,/*lPixel*/,{|| cLocal			})
+TRCell():New(oItens,"CCF"			,/*Tabela*/,STR0041,PesqPict("SD2","D2_CF")    ,TamSX3("D2_CF" 	)[1]	,/*lPixel*/,{|| cCF				})
+TRCell():New(oItens,"CTES"	  		,/*Tabela*/,STR0042,PesqPict("SD2","D2_TES")   ,TamSX3("D2_TES"    )[1]	,/*lPixel*/,{|| cTes			})
+TRCell():New(oItens,"CPEDIDO"		,/*Tabela*/,STR0043,PesqPict("SD2","D2_PEDIDO"),TamSX3("D2_PEDIDO" )[1]	,/*lPixel*/,{|| cPedido			})
+TRCell():New(oItens,"CITEMPV"		,/*Tabela*/,STR0044,PesqPict("SD2","D2_ITEMPV"),TamSX3("D2_ITEMPV"	)[1]	,/*lPixel*/,{|| cItemPV			})
+TRCell():New(oItens,"NVALIPI"		,/*Tabela*/,STR0045,PesqPict("SD2","D2_VALIPI")	,TamSX3("D2_VALIPI"	)[1]	,/*lPixel*/,{|| nValIpi			},,,"RIGHT")
+TRCell():New(oItens,"NVALICM"		,/*Tabela*/,STR0046,PesqPict("SD2","D2_VALICM")	,TamSX3("D2_VALICM"	)[1]	,/*lPixel*/,{|| nValIcm			},,,"RIGHT")
+TRCell():New(oItens,"NVALISS"		,/*Tabela*/,STR0047,PesqPict("SD2","D2_VALISS")	,TamSX3("D2_VALISS"	)[1]	,/*lPixel*/,{|| nVlrISS			},,,"RIGHT")
+TRCell():New(oItens,"NDESACES"		,/*Tabela*/,STR0032,PesqPict("SD2","D2_TOTAL")	,TamSX3("D2_TOTAL"	)[1]	,/*lPixel*/,{|| nAcN3			},,,"RIGHT")
+TRCell():New(oItens,"NACN6"			,/*Tabela*/,STR0033,PesqPict("SD2","D2_TOTAL")	,TamSX3("D2_TOTAL"	)[1]	,/*lPixel*/,{|| nAcN6			},,,"RIGHT")
+
+
+
+// Totalizador por dia
+oTotDia := TRSection():New(oReport,STR0058,{"SF2","SD2"},/*{Array com as ordens do relatório}*/,/*Campos do SX3*/,/*Campos do SIX*/)
+oTotDia:SetTotalInLine(.F.)
+TRCell():New(oTotDia,"CCOD"			,/*Tabela*/,STR0035,/*Picture*/						,TamSX3("D2_COD"	)[1]		,/*lPixel*/,/*{|| code-block de impressao }*/	)
+TRCell():New(oTotDia,"CDESC"		,/*Tabela*/,STR0036,/*Picture*/						,TamSX3("B1_DESC"	)[1]		,/*lPixel*/,/*{|| code-block de impressao }*/	)
+TRCell():New(oTotDia,"NACD1"		,/*Tabela*/,STR0037,PesqPict("SD2","D2_QUANT")		,TamSX3("D2_QUANT"	)[1]		,/*lPixel*/,{|| nAcD1 },,,"RIGHT"							)
+TRCell():New(oTotDia,"NPRCVEN"		,/*Tabela*/,STR0038,/*Picture*/						,TamSX3("D2_PRCVEN"	)[1]			  		,/*lPixel*/,/*{|| code-block de impressao }*/,,,"RIGHT"	)
+TRCell():New(oTotDia,"NACD2"		,/*Tabela*/,STR0039,PesqPict("SD2","D2_TOTAL")		,TamSX3("D2_TOTAL"	)[1]		,/*lPixel*/,{|| nAcD2 },,,"RIGHT"							)
+TRCell():New(oTotDia,"CLOCAL"		,/*Tabela*/,STR0040,/*Picture*/						,TamSX3("D2_LOCAL"  )[1]					,/*lPixel*/,/*{|| code-block de impressao }*/	)
+TRCell():New(oTotDia,"CCF"			,/*Tabela*/,STR0041,/*Picture*/						,TamSX3("D2_CF"  )[1]					,/*lPixel*/,/*{|| code-block de impressao }*/	)
+TRCell():New(oTotDia,"CTES"	  		,/*Tabela*/,STR0042,/*Picture*/						,TamSX3("D2_TES"  )[1]					,/*lPixel*/,/*{|| code-block de impressao }*/	)
+TRCell():New(oTotDia,"CPEDIDO"		,/*Tabela*/,STR0043,/*Picture*/						,TamSX3("D2_PEDIDO"  )[1]					,/*lPixel*/,/*{|| code-block de impressao }*/	)
+TRCell():New(oTotDia,"CITEMPV"		,/*Tabela*/,STR0044,/*Picture*/						,TamSX3("D2_ITEMPV"  )[1]					,/*lPixel*/,/*{|| code-block de impressao }*/	)
+TRCell():New(oTotDia,"NACD5"		,/*Tabela*/,STR0045,PesqPict("SD2","D2_VALIPI")		,TamSX3("D2_VALIPI"	)[1]		,/*lPixel*/,{|| nAcD5 },,,"RIGHT"				)
+TRCell():New(oTotDia,"NACD4"		,/*Tabela*/,STR0046,PesqPict("SD2","D2_VALICM")		,TamSX3("D2_VALICM"	)[1]		,/*lPixel*/,{|| nAcD4 },,,"RIGHT"				)
+TRCell():New(oTotDia,"NACD7"		,/*Tabela*/,STR0047,PesqPict("SD2","D2_VALISS")		,TamSX3("D2_VALISS"	)[1]		,/*lPixel*/,{|| nAcD7 },,,"RIGHT"				)	
+TRCell():New(oTotDia,"NACD3"		,/*Tabela*/,STR0032,PesqPict("SD2","D2_TOTAL")		,TamSX3("D2_TOTAL"	)[1]		,/*lPixel*/,{|| nAcD3 },,,"RIGHT"				)	
+TRCell():New(oTotDia,"NACD6"		,/*Tabela*/,STR0033,PesqPict("SD2","D2_TOTAL")		,TamSX3("D2_TOTAL"	)[1]		,/*lPixel*/,{|| nAcD6 },,,"RIGHT"				)
+
+
+// Totalizador das Despesas Acessorias (IPI, ICMS e Outros Gastos)
+oTotDesp := TRSection():New(oReport,STR0059,{"SF2","SD2"},/*{Array com as ordens do relatório}*/,/*Campos do SX3*/,/*Campos do SIX*/)
+oTotDesp:SetTotalInLine(.F.)
+TRCell():New(oTotDesp,"CNOTA"		,/*Tabela*/,RetTitle("D2_DOC")		,PesqPict("SD2","D2_DOC"	),TamSX3("D2_DOC"		)[1]	,/*lPixel*/,/*{|| code-block de impressao }*/	)	
+TRCell():New(oTotDesp,"CSERIE"		,/*Tabela*/,RetTitle("D2_SERIE")	,PesqPict("SD2","D2_SERIE"	),TamSX3("D2_SERIE"		)[1]	,/*lPixel*/,/*{|| code-block de impressao }*/	)
+TRCell():New(oTotDesp,"NACN1"		,/*Tabela*/,RetTitle("D2_QUANT")	,PesqPict("SD2","D2_QUANT"	),TamSX3("D2_QUANT"		)[1]	,/*lPixel*/,/*{|| code-block de impressao }*/,,,"RIGHT"	)
+TRCell():New(oTotDesp,"NACN2"		,/*Tabela*/,RetTitle("D2_TOTAL")	,PesqPict("SD2","D2_TOTAL"	),TamSX3("D2_TOTAL"		)[1]	,/*lPixel*/,/*{|| code-block de impressao }*/,,,"RIGHT"	)
+TRCell():New(oTotDesp,"NACN5"		,/*Tabela*/,RetTitle("D2_VALIPI")	,PesqPict("SD2","D2_VALIPI"	),TamSX3("D2_VALIPI"	)[1]	,/*lPixel*/,{|| nIPIDesp },,,"RIGHT"						)
+TRCell():New(oTotDesp,"NACN4"		,/*Tabela*/,RetTitle("D2_VALICM")	,PesqPict("SD2","D2_VALICM"	),TamSX3("D2_VALICM"	)[1]	,/*lPixel*/,{|| nICMDesp },,,"RIGHT"						)
+TRCell():New(oTotDesp,"NVLRISS"		,/*Tabela*/,RetTitle("D2_VALISS")	,PesqPict("SD2","D2_VALISS"	),TamSX3("D2_VALISS"	)[1]	,/*lPixel*/,/*{|| code-block de impressao }*/,,,"RIGHT"	)
+TRCell():New(oTotDesp,"NDESPACES"	,/*Tabela*/,STR0032					,PesqPict("SD2","D2_TOTAL"	),TamSX3("D2_TOTAL"		)[1]	,/*lPixel*/,{|| nAcN3+nFretAut },,,"RIGHT"				)
+TRCell():New(oTotDesp,"NACN6"		,/*Tabela*/,STR0033					,PesqPict("SD2","D2_TOTAL"	),TamSX3("D2_TOTAL"		)[1]	,/*lPixel*/,/*{|| code-block de impressao }*/,,,"RIGHT"	)
+
+	
+
+oReport:Section(3):SetEdit(.F.)
+oReport:Section(4):SetEdit(.F.)
+oReport:Section(1):SetUseQuery(.F.) // Novo compomente tReport para adcionar campos de usuario no relatorio qdo utiliza query    
+oReport:Section(2):SetUseQuery(.F.) // Novo compomente tReport para adcionar campos de usuario no relatorio qdo utiliza query
+oReport:Section(2):Section(1):SetUseQuery(.F.) // Novo compomente tReport para adcionar campos de usuario no relatorio qdo utiliza query
+
+
+// Totalização por Item - Resumo Específico SENTAX
+oResumo := TRSection():New(oReport,"Totalizador por Item",{"SF2","SD2"},/*{Array com as ordens do relatório}*/,/*Campos do SX3*/,/*Campos do SIX*/)
+oResumo:SetTotalInLine(.F.)
+//oResumo:SetEdit(.F.)
+
+TRCell():New(oResumo,"CCOD"			,/*Tabela*/,RetTitle("D2_COD"		)	,/*Picture*/					,TamSX3("D2_COD"	)[1]	,/*lPixel*/,/*{|| code-block de impressao }*/	)
+TRCell():New(oResumo,"CDESC"		,/*Tabela*/,RetTitle("B1_DESC"		)	,/*Picture*/					,TamSX3("B1_DESC"	)[1]	,/*lPixel*/,/*{|| code-block de impressao }*/	)
+TRCell():New(oResumo,"CNCM"		,/*Tabela*/,RetTitle("B1_POSIPI"		)	,PesqPict("SB1","B1_POSIPI"	),TamSX3("B1_POSIPI"	)[1]	,/*lPixel*/,/*{|| code-block de impressao }*/	)
+TRCell():New(oResumo,"CCFOP"		,/*Tabela*/,RetTitle("D2_CF"		)	,PesqPict("SD2","D2_CF"	),TamSX3("D2_CF"	)[1]	,/*lPixel*/,/*{|| code-block de impressao }*/	)
+TRCell():New(oResumo,"NQUANT"		,/*Tabela*/,RetTitle("D2_QUANT"		)	,PesqPict("SD2","D2_QUANT"	)	,TamSX3("D2_QUANT"	)[1]	,/*lPixel*/,/*{|| code-block de impressao }*/	)
+TRCell():New(oResumo,"NTOTAL"	,/*Tabela*/,RetTitle("D2_TOTAL"		)	,PesqPict("SD2","D2_TOTAL"	)	,TamSX3("D2_TOTAL"	)[1]	,/*lPixel*/,/*{|| code-block de impressao }*/	)
+TRCell():New(oResumo,"NBASEICM"	,/*Tabela*/,RetTitle("D2_BASEICM"		)	,PesqPict("SD2","D2_BASEICM"	)	,TamSX3("D2_BASEICM"	)[1]	,/*lPixel*/,/*{|| code-block de impressao }*/	)
+TRCell():New(oResumo,"NALIQICM"	,/*Tabela*/,RetTitle("D2_PICM"		)	,PesqPict("SD2","D2_PICM"	)	,TamSX3("D2_PICM"	)[1]	,/*lPixel*/,/*{|| code-block de impressao }*/	)
+TRCell():New(oResumo,"NVALORICM"	,/*Tabela*/,RetTitle("D2_VALICM"		)	,PesqPict("SD2","D2_VALICM"	)	,TamSX3("D2_VALICM"	)[1]	,/*lPixel*/,/*{|| code-block de impressao }*/	)
+
+
+	
+
+Return(oReport)
+
+/*/
+ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±
+±±ÚÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄ¿±±
+±±³Programa  ³ReportPrin³ Autor ³Marco Bianchi          ³ Data ³05/06/2006³±±
+±±ÃÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄ´±±
+±±³Descri‡…o ³A funcao estatica ReportDef devera ser criada para todos os ³±±
+±±³          ³relatorios que poderao ser agendados pelo usuario.          ³±±
+±±³          ³                                                            ³±±
+±±ÃÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´±±
+±±³Retorno   ³Nenhum                                                      ³±±
+±±ÃÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´±±
+±±³Parametros³ExpO1: Objeto Report do Relatório                           ³±±
+±±³          ³                                                            ³±±
+±±ÃÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´±±
+±±³   DATA   ³ Programador   ³Manutencao efetuada                         ³±±
+±±ÃÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´±±
+±±³          ³               ³                                            ³±±
+±±ÀÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ±±
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±
+ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
+/*/
+Static Function ReportPrint(oReport,cAliasQry,oSintetico,oItens,oItensD1,oItensD2,oCabec,oCabecF1,oCabecF2,oTotDia,oResumo)
+
+
+If mv_par17 == 2
+	TRFunction():New(oSintetico:Cell("NACN1")		,/* cID */,"SUM",/*oBreak*/,/*cTitle*/,/*cPicture*/,/*uFormula*/,.T./*lEndSection*/,.T./*lEndReport*/,/*lEndPage*/)  
+	TRFunction():New(oSintetico:Cell("NACN2")		,/* cID */,"SUM",/*oBreak*/,/*cTitle*/,/*cPicture*/,{||IIF(SF2->F2_TIPO $ "IP",0,nAcN2)},.T./*lEndSection*/,.T./*lEndReport*/,/*lEndPage*/)  
+	TRFunction():New(oSintetico:Cell("NACN5")		,/* cID */,"SUM",/*oBreak*/,/*cTitle*/,/*cPicture*/,/*uFormula*/,.T./*lEndSection*/,.T./*lEndReport*/,/*lEndPage*/)  
+	TRFunction():New(oSintetico:Cell("NACN4")		,/* cID */,"SUM",/*oBreak*/,/*cTitle*/,/*cPicture*/,/*uFormula*/,.T./*lEndSection*/,.T./*lEndReport*/,/*lEndPage*/)  
+	TRFunction():New(oSintetico:Cell("NVLRISS")		,/* cID */,"SUM",/*oBreak*/,/*cTitle*/,/*cPicture*/,/*uFormula*/,.T./*lEndSection*/,.T./*lEndReport*/,/*lEndPage*/)  
+	TRFunction():New(oSintetico:Cell("NDESPACES")	,/* cID */,"SUM",/*oBreak*/,/*cTitle*/,/*cPicture*/,/*uFormula*/,.T./*lEndSection*/,.T./*lEndReport*/,/*lEndPage*/)  
+	TRFunction():New(oSintetico:Cell("NACN6")		,/* cID */,"SUM",/*oBreak*/,/*cTitle*/,/*cPicture*/,{||IIF(SF2->F2_TIPO $ "IP",0,nAcN6)},.T./*lEndSection*/,.T./*lEndReport*/,/*lEndPage*/)   
+	    
+	oReport:SetTotalInLine(.F.)
+	TRImpSint(oReport) 
+Else
+	TRFunction():New(oTotDia:Cell("NACD1")		,/* cID */,"SUM",/*oBreak*/,STR0037,PesqPict("SD2","D2_QUANT"	),/*uFormula*/,.T./*lEndSection*/,.F./*lEndReport*/,.F./*lEndPage*/)  
+	TRFunction():New(oTotDia:Cell("NACD2")		,/* cID */,"SUM",/*oBreak*/,STR0039,PesqPict("SD2","D2_TOTAL"	),/*uFormula*/,.T./*lEndSection*/,.F./*lEndReport*/,.F./*lEndPage*/)  
+	TRFunction():New(oTotDia:Cell("NACD5")		,/* cID */,"SUM",/*oBreak*/,STR0045,PesqPict("SD2","D2_VALIPI"	),/*uFormula*/,.T./*lEndSection*/,.F./*lEndReport*/,.F./*lEndPage*/)  
+	TRFunction():New(oTotDia:Cell("NACD4")		,/* cID */,"SUM",/*oBreak*/,STR0046,PesqPict("SD2","D2_VALICM"	),/*uFormula*/,.T./*lEndSection*/,.F./*lEndReport*/,.F./*lEndPage*/)  
+	TRFunction():New(oTotDia:Cell("NACD7") 		,/* cID */,"SUM",/*oBreak*/,STR0047,PesqPict("SD2","D2_VALISS"	),/*uFormula*/,.T./*lEndSection*/,.F./*lEndReport*/,.F./*lEndPage*/)  
+	TRFunction():New(oTotDia:Cell("NACD3") 		,/* cID */,"SUM",/*oBreak*/,STR0032,PesqPict("SD2","D2_TOTAL"	),/*uFormula*/,.T./*lEndSection*/,.F./*lEndReport*/,.F./*lEndPage*/)  
+	TRFunction():New(oTotDia:Cell("NACD6")		,/* cID */,"SUM",/*oBreak*/,STR0033,PesqPict("SD2","D2_TOTAL"	),/*uFormula*/,.T./*lEndSection*/,.F./*lEndReport*/,.F./*lEndPage*/)  
+		
+	TRFunction():New(oItens:Cell("NQUANT")		,/* cID */,"SUM",/*oBreak*/,STR0037,PesqPict("SD2","D2_QUANT"	),/*uFormula*/,.T./*lEndSection*/,.F./*lEndReport*/,.F./*lEndPage*/)  
+	TRFunction():New(oItens:Cell("NTOTAL")		,/* cID */,"SUM",/*oBreak*/,STR0039,PesqPict("SD2","D2_TOTAL"	),/*uFormula*/,.T./*lEndSection*/,.F./*lEndReport*/,.F./*lEndPage*/)  
+	TRFunction():New(oItens:Cell("NVALIPI")		,/* cID */,"SUM",/*oBreak*/,STR0045,PesqPict("SD2","D2_VALIPI"	),/*uFormula*/,.T./*lEndSection*/,.F./*lEndReport*/,.F./*lEndPage*/)  
+	TRFunction():New(oItens:Cell("NVALICM")		,/* cID */,"SUM",/*oBreak*/,STR0046,PesqPict("SD2","D2_VALICM"	),/*uFormula*/,.T./*lEndSection*/,.F./*lEndReport*/,.F./*lEndPage*/)  
+	TRFunction():New(oItens:Cell("NVALISS")		,/* cID */,"SUM",/*oBreak*/,STR0047,PesqPict("SD2","D2_VALISS"	),/*uFormula*/,.T./*lEndSection*/,.F./*lEndReport*/,.F./*lEndPage*/)  
+	TRFunction():New(oItens:Cell("NDESACES")	,/* cID */,"SUM",/*oBreak*/,STR0032,PesqPict("SD2","D2_TOTAL"	),/*uFormula*/,.T./*lEndSection*/,.F./*lEndReport*/,.F./*lEndPage*/)  
+	TRFunction():New(oItens:Cell("NACN6")		,/* cID */,"SUM",/*oBreak*/,STR0033,PesqPict("SD2","D2_TOTAL"	),/*uFormula*/,.T./*lEndSection*/,.F./*lEndReport*/,.F./*lEndPage*/)
+	
+	TRFunction():New(oResumo:Cell("NQUANT")		,/* cID */,"SUM",/*oBreak*/,"Total",PesqPict("SD2","D2_TOTAL"	),/*uFormula*/,.T./*lEndSection*/,.F./*lEndReport*/,.F./*lEndPage*/)
+	TRFunction():New(oResumo:Cell("NTOTAL")		,/* cID */,"SUM",/*oBreak*/,"Total",PesqPict("SD2","D2_TOTAL"	),/*uFormula*/,.T./*lEndSection*/,.F./*lEndReport*/,.F./*lEndPage*/)
+	TRFunction():New(oResumo:Cell("NBASEICM")		,/* cID */,"SUM",/*oBreak*/,"Total Base",PesqPict("SD2","D2_TOTAL"	),/*uFormula*/,.T./*lEndSection*/,.F./*lEndReport*/,.F./*lEndPage*/)
+	TRFunction():New(oResumo:Cell("NVALORICM")		,/* cID */,"SUM",/*oBreak*/,"Total ICMS",PesqPict("SD2","D2_TOTAL"	),/*uFormula*/,.T./*lEndSection*/,.F./*lEndReport*/,.F./*lEndPage*/)
+	
+	
+
+	 
+	 	
+	oReport:SetTotalInLine(.F.)
+	TRImpAna(oReport,cAliasQry,oItens,oCabec,oTotDia)   
+	   
+EndIf   
+
+Return
+
+
+/*
+ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±
+±±ÚÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄ¿±±
+±±³Fun‡…o    ³ TRImpSint³ Autor ³ Marco Bianchi         ³ Data ³ 07/06/06 ³±±
+±±ÃÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄ´±±
+±±³Descri‡…o ³ Imprime Relatorio Sintetico (Base Brasil).                 ³±±
+±±ÃÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´±±
+±±³ Uso      ³ MATR550 - R4 	                                          ³±±
+±±ÀÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ±±
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±
+ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
+*/
+
+Static Function TRImpSint(oReport)
+
+Local nAcD1  	:= 0, nAcD2	:= 0, nAcD3	:= 0, nAcD4 := 0, nAcD5 := 0, nAcD6:= 0, nAcD7 := 0
+Local lContinua	:= .T., dEmisAnt
+Local nReg     	:= 0
+Local nTotQuant	:= 0
+Local nTotal   	:= 0
+Local nTotIcm  	:= 0
+Local nTotIPI  	:= 0
+Local nTotRet   := 0
+Local cNumPed  	:= ""
+Local cMascara 	:= GetMv("MV_MASCGRD")
+Local nTamRef  	:= Val(Substr(cMascara,1,2))
+Local dEmiDia 	:= dDataBase
+Local nFrete  	:= 0
+Local nIcmAuto	:= 0
+Local nSeguro 	:= 0
+Local nDespesa	:= 0
+Local nValIPI 	:= 0
+Local nValICM 	:= 0
+Local nValISS 	:= 0
+Local nVlrISS   := 0
+Local cTipoNF 	:= 0 
+Local lFretAut	:= GetNewPar("MV_FRETAUT",.T.)
+Local cKey    	:= ""
+Local lQuery	:= .F.
+Local cExpr 	:= ""
+Local cExprGrade:= ""
+
+#IFNDEF TOP
+	Local cCondicao := ""
+#ENDIF
+
+oReport:Section(1):Cell("CNOTA"		):SetBlock({|| cNota			})
+oReport:Section(1):Cell("CSERIE"	):SetBlock({|| cSerie			})
+oReport:Section(1):Cell("NACN1"		):SetBlock({|| nAcN1			})
+oReport:Section(1):Cell("NACN2"		):SetBlock({|| nAcN2			})
+oReport:Section(1):Cell("NACN5"		):SetBlock({|| nAcN5			})
+oReport:Section(1):Cell("NACN4"		):SetBlock({|| nAcN4			})
+oReport:Section(1):Cell("NVLRISS"	):SetBlock({|| nVlrISS 			})
+oReport:Section(1):Cell("NDESPACES"	):SetBlock({|| nAcN3+nFretAut	})
+oReport:Section(1):Cell("NACN6"		):SetBlock({|| nAcN6			})
+
+
+//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+//³Filtragem do relatório                                                  ³
+//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+#IFDEF TOP
+	
+    If TcSrvType()<>"AS/400"
+		//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+		//³Query do relatório da secao 1 - SINTETICO                               ³
+		//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+		lQuery := .T.
+		cAliasQry := GetNextAlias()
+		cAliasSD2 := cAliasQry
+		cWhere :="%"
+		If MV_PAR15 == 2
+			cWhere += "AND F2_TIPO<>'D'"
+		EndIf
+		cWhere += " AND NOT ("+IsRemito(2,"F2_TIPODOC")+")"
+		cWhere += "%"
+
+		//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+		//³Transforma parametros Range em expressao SQL                            ³
+		//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+		MakeSqlExpr(oReport:uParam)
+		                                       
+		oReport:Section(1):BeginQuery()	
+		BeginSql Alias cAliasQry
+		SELECT F2_DOC,F2_SERIE,F2_EMISSAO,F2_TIPO,F2_ICMSRET
+			,F2_FRETE,F2_FRETAUT,F2_ICMAUTO,F2_VALBRUT,F2_VALIPI,F2_VALICM,F2_VALISS
+			,D2_DOC,D2_SERIE,D2_COD,D2_GRUPO,D2_TP,D2_TIPO,D2_CLIENTE,D2_LOJA,D2_GRADE
+			,D2_CF,D2_TES,D2_LOCAL,D2_PRCVEN,D2_ICMSRET,D2_QUANT,D2_TOTAL,D2_EMISSAO
+			,D2_VALIPI,D2_CODISS,D2_VALISS,D2_VALICM,F2_FRETE,F2_SEGURO,F2_DESPESA, D2_GRADE,D2_PEDIDO, D2_ITEMPV
+		FROM %Table:SF2% SF2, %Table:SD2% SD2
+		WHERE F2_FILIAL = %xFilial:SF2%
+			AND F2_DOC >= %Exp:mv_par01% AND F2_DOC <= %Exp:mv_par02%
+			AND F2_EMISSAO >= %Exp:DtoS(mv_par03)% AND F2_EMISSAO <= %Exp:DtoS(mv_par04)%
+			AND F2_SERIE >= %Exp:mv_par06% AND F2_SERIE <= %Exp:mv_par07%
+			AND SF2.%notdel%
+			AND D2_FILIAL = %xFilial:SD2% 
+			AND D2_CLIENTE = F2_CLIENTE AND D2_LOJA = F2_LOJA
+			AND D2_DOC = F2_DOC AND D2_SERIE = F2_SERIE
+			AND SD2.%notdel%       
+			%Exp:cWhere%	
+		ORDER BY SF2.F2_EMISSAO,SF2.F2_DOC,SF2.F2_SERIE,SD2.D2_COD,SD2.D2_ITEM
+		EndSql       
+		oReport:Section(1):EndQuery({MV_PAR16,MV_PAR10,MV_PAR05,MV_PAR11})
+	Else
+#ENDIF
+
+		//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+		//³ Cria Indice de Trabalho                                      ³
+		//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+		cAliasQry := "SF2"
+		cAliasSD2 := "SD2"  
+	   
+		//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+		//³Utilizar a funcao MakeAdvlExpr, somente quando for utilizar o range de parametros para ambiente CDX ³
+		//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+		MakeAdvplExpr("MTR550P9R1") 		
+	   
+		dbSelectArea(cAliasQry)
+		cKey := 'F2_FILIAL+DTOS(F2_EMISSAO)+F2_DOC+F2_SERIE'
+		cCondicao := 'F2_FILIAL=="'+xFilial("SF2")+'".And.F2_DOC>="'+mv_par01+'"'
+		cCondicao += '.And.F2_DOC<="'+mv_par02+'".And.DTOS(F2_EMISSAO)>="'+DTOS(mv_par03)+'"'
+		cCondicao += '.And.DTOS(F2_EMISSAO)<="'+DTOS(mv_par04)+'".And. F2_SERIE>="'+mv_par06+'".And.F2_SERIE<= "'+mv_par07+'"'
+		
+		
+		If !Empty(mv_par16)
+			cCondicao += '.And.'+mv_par16+''
+		EndIf	
+		
+		cCondicao += '.And. !('+IsRemito(2,'SF2->F2_TIPODOC')+')'		
+		If mv_par15 == 2
+			cCondicao += '.And.F2_TIPO<>"D"'
+		EndIf
+		
+		oReport:Section(1):SetFilter(cCondicao,cKey)
+#IFDEF TOP
+	Endif    
+#ENDIF
+
+//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+//³Inicio da impressao do fluxo do relatório                               ³
+//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+oReport:SetMeter((cAliasQry)->(LastRec()))
+dbSelectArea(cAliasQry)
+oReport:Section(1):Init()
+lFecha := .T.
+nAcN1  := 0; nAcN2	:= 0; nAcN3	:= 0; nAcN4 := 0; nAcN5 := 0; nAcN6 := 0
+If !lQuery
+	cExpr := IIf(!Empty(mv_par05),mv_par05,"")
+	cExpr += IIf(!Empty(cExpr),IIf(!Empty(mv_par10)," .AND. "+mv_par10,""),IIf(!Empty(mv_par10),mv_par10,""))
+	cExprGrade := cExpr
+	cExpr += IIf(!Empty(cExpr),IIf(!Empty(mv_par11)," .AND. "+mv_par11,""),IIf(!Empty(mv_par11),mv_par11,""))
+EndIf	
+
+While !oReport:Cancel() .And. !(cAliasQry)->(Eof())
+
+	If !lQuery
+		dbSelectArea("SD2")
+		dbSetOrder(3)
+		dbSeek(cFilial+SF2->F2_DOC+SF2->F2_SERIE)
+	Endif
+
+	nTotRet  := 0
+	dEmisAnt :=	(cAliasQry)->F2_EMISSAO
+	cNota	 := (cAliasQry)->F2_DOC
+	cSerie	 := (cAliasQry)->F2_SERIE
+	nFrete	 := (cAliasQry)->F2_FRETE
+	nFretAut := (cAliasQry)->F2_FRETAUT	
+	nIcmAuto := (cAliasQry)->F2_ICMAUTO
+	nSeguro	 := (cAliasQry)->F2_SEGURO
+	nDespesa := (cAliasQry)->F2_DESPESA
+	nValIPI	 := (cAliasQry)->F2_VALIPI
+	nValICM	 := (cAliasQry)->F2_VALICM
+	nValISS	 := (cAliasQry)->F2_VALISS
+	cTipoNF	 := (cAliasQry)->F2_TIPO
+	
+	While !Eof() .and. D2_DOC+D2_SERIE == cNota+cSerie
+
+		If !lQuery
+			If !Empty(cExpr)
+				If !(&(cExpr)) .Or. D2_SERIE < mv_par06 .Or. D2_SERIE > mv_par07
+					dbSkip()
+					Loop
+				Endif
+			Else
+				If D2_SERIE < mv_par06 .Or. D2_SERIE > mv_par07
+					dbSkip()
+					Loop
+				Endif
+			Endif
+		Endif
+		
+		//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+		//³ Valida o produto conforme a mascara       ³
+		//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+		lRet:=ValidMasc((cAliasSD2)->D2_COD,MV_PAR08)
+		If !lRet
+			dbSkip()
+			Loop
+		Endif
+
+		cNumPed  := D2_PEDIDO
+		nTotQuant:= 0
+		nTotal   := 0
+		nTotICM  := 0
+		nTotIPI  := 0
+
+		dbSelectArea("SF4")
+		dbSetOrder(1)
+		dbSeek(xFilial("SF4") + (cAliasSD2)->D2_TES)
+		If SF4->F4_INCSOL == "S"
+			nTotRet += (cAliasSD2)->D2_ICMSRET
+		Endif	
+
+		nReg := 0
+		dbSelectArea(cAliasQry)
+		
+		If (cAliasSD2)->D2_GRADE == "S" .And. MV_PAR09 == 1
+			cProdRef:= Substr((cAliasSD2)->D2_COD,1,nTamRef)
+			While !Eof() .And. cProdRef == Substr((cAliasSD2)->D2_COD,1,nTamRef) ;
+					.And. (cAliasSD2)->D2_GRADE == "S" .And. cNumPed == (cAliasSD2)->D2_PEDIDO
+				nTotQuant+= (cAliasSD2)->D2_QUANT
+				nTotal   += (cAliasSD2)->D2_TOTAL
+				nTotIPI  += (cAliasSD2)->D2_VALIPI
+
+				If Empty((cAliasSD2)->D2_CODISS) .And. (cAliasSD2)->D2_VALISS == 0 // ISS
+					nTotIcm  += (cAliasSD2)->D2_VALICM
+				EndIf
+				nReg     := Recno()
+				dbSkip()
+				
+				If !lQuery .And. !Empty(cExprGrade)
+					If !(&(cExprGrade))
+						dbSkip()
+						Loop
+					Endif
+				Endif
+				//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+				//³ Valida o produto conforme a mascara       ³
+				//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+				lRet:=ValidMasc((cAliasSD2)->D2_COD,MV_PAR08)
+				If !lRet
+					dbSkip()
+					Loop
+				Endif
+				
+			End
+			
+			If !lQuery
+				If nReg > 0
+					dbGoto(nReg)
+					nReg:=0
+				Endif
+			Endif
+    		nAcN1 += nTotQuant
+
+			If SF4->F4_AGREG <> "N"   
+			   nAcN2 += xMoeda(nTotal	,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO)
+			   If SF4->F4_AGREG == "D"
+				   nAcN2 -= xMoeda(nTotICM,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO)
+			   EndIf
+            EndIf
+
+			nAcN4 += xMoeda(nTotICM,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO)
+			nAcN5 += xMoeda(nTotIPI,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO)
+			
+		Else
+
+			nAcN1 += (cAliasSD2)->D2_QUANT
+			If SF4->F4_AGREG <> "N"   
+   			   nAcN2 += xMoeda((cAliasSD2)->D2_TOTAL,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO)
+				If SF4->F4_AGREG = "D"
+					nAcN2 -= xMoeda((cAliasSD2)->D2_VALICM,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO)
+				EndIf
+			Endif
+
+			If Empty((cAliasSD2)->D2_CODISS) .And. (cAliasSD2)->D2_VALISS == 0 // ISS
+				nAcN4 += xMoeda((cAliasSD2)->D2_VALICM,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO)
+			EndIf
+
+			nAcN5 += xMoeda((cAliasSD2)->D2_VALIPI,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO)
+
+		Endif
+		dEmiDia := (cAliasSD2)->D2_EMISSAO
+		
+		dbSelectArea(cAliasSD2)
+		If nReg==0
+			dbSkip()
+		Endif
+
+    EndDo
+    
+	nAcN3 := 0
+	If (nAcN2+nAcN4+nAcN5) # 0
+		nAcN3 := xMoeda(nFrete+nSeguro+nDespesa,1,MV_PAR13,dEmiDia)
+		If nAcN3 != 0 .Or. nFretAut != 0
+			nAcN5 := xMoeda(nValIPI,1,MV_PAR13,dEmiDia)
+			nAcN4 := xMoeda(nValICM,1,MV_PAR13,dEmiDia)
+		EndIf
+		nAcN6 := nAcN2 + nAcN3 + nAcN5 + xMoeda(nTotRet,1,MV_PAR13,dEmiDia) +If(lFretAut,nIcmAuto,0)
+		nVlrISS:= xMoeda(nValISS,1,MV_PAR13,dEmiDia)
+		
+		dbSelectArea("SF2")
+		dbSetOrder(1)
+		dbSeek(xFilial("SF2")+cNota+cSerie)
+		
+		dbSelectArea("SD2")
+		dbSetOrder(3)
+		dbSeek(xFilial("SD2")+SF2->F2_DOC+SF2->F2_SERIE)
+
+		oReport:Section(1):PrintLine()		
+		
+	EndIf
+
+	nAcD1 += nAcN1
+	nAcD2 += nAcN2
+	nAcD3 += nAcN3+nFretAut
+	nAcD4 += nAcN4
+	nAcD5 += nAcN5
+	nAcD6 += nAcN6
+	nAcD7 += nVlrISS
+
+	nAcn1		:= 0
+	nAcn2		:= 0
+	nAcn3		:= 0
+	nAcn4		:= 0
+	nAcn5		:= 0
+	nAcn6		:= 0
+    nVlrISS		:= 0
+
+	dbSelectArea(cAliasQry)
+	If !lQuery
+		dbSkip()
+	Endif
+
+	If nAcd1+nAcD4+nAcD5 > 0 .And. ( dEmisAnt != (cAliasQry)->F2_EMISSAO .Or. Eof() )
+		oReport:Section(1):SetTotalText(STR0034 +  DtoC(dEmisAnt))
+		oReport:Section(1):Finish()
+		oReport:SkipLine(2)		
+		oReport:Section(1):Init()
+		nAcD1 	:= 0
+		nAcD2 	:= 0
+		nAcD3 	:= 0
+		nAcD4 	:= 0
+		nAcD5 	:= 0
+		nAcD6 	:= 0
+		nAcD7 	:= 0
+		lFecha 	:= .F.
+	EndIf	
+
+	oReport:IncMeter()
+EndDo
+
+If lFecha
+	oReport:Section(1):Finish()
+EndIf
+
+oReport:Section(1):SetPageBreak(.T.) 
+
+Return
+
+
+
+/*
+ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±
+±±ÚÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÂÄÄÄÄÄÄÂÄÄÄÄÄÄÄÄÄÄ¿±±
+±±³Fun‡…o    ³ TRImpAna ³ Autor ³ Marco Bianchi         ³ Data ³ 07/06/06 ³±±
+±±ÃÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄ´±±
+±±³Descri‡…o ³ Imprime Relatorio Analitico (Base Brasil).                 ³±±
+±±ÃÄÄÄÄÄÄÄÄÄÄÅÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ´±±
+±±³ Uso      ³ MATR550 - R4		                                          ³±±
+±±ÀÄÄÄÄÄÄÄÄÄÄÁÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ±±
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±
+ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
+*/
+
+Static Function TRImpAna(oReport,cAliasQry,oItens,oCabec,oTotDia)
+        
+Local nAcD1  	:= 0, nAcD2 := 0, nAcD3 := 0, nAcD4 := 0, nAcD5 := 0, nAcD6:= 0, nAcD7 := 0
+Local lContinua	:= .T., dEmisAnt
+Local nReg     	:= 0
+Local nTotQuant	:= 0
+Local nTotal   	:= 0
+Local nTotIcm  	:= 0
+Local nTotIPI  	:= 0
+Local nTotRet   := 0
+Local cNumPed  	:= ""
+Local cMascara 	:= GetMv("MV_MASCGRD")
+Local nTamRef  	:= Val(Substr(cMascara,1,2))
+Local dEmiDia 	:= dDataBase
+Local nFrete  	:= 0
+Local nIcmAuto	:= 0
+Local nSeguro 	:= 0
+Local nDespesa	:= 0
+Local nValIPI 	:= 0
+Local nValICM 	:= 0
+Local nValISS 	:= 0
+Local nVlrISS   := 0
+Local cTipoNF 	:= 0 
+Local lFretAut	:= GetNewPar("MV_FRETAUT",.T.)
+Local cKey    	:= ""               
+Local lQuery	:= .F.
+Local cExpr     := ""
+Local cExprGrade:= "" 
+Local lFirst	:= .F.
+Local oResumo := oReport:Section(5)
+Local aResumo := {}
+Local nItem := 0
+
+#IFNDEF TOP
+	Local cCondicao := ""
+#ENDIF
+
+oReport:Section(2):Cell("F2_CLIENTE"	):SetBlock({|| Substr(cCliente,1,6)	})
+oReport:Section(2):Cell("F2_LOJA"		):SetBlock({|| cLoja	})
+oReport:Section(2):Cell("A1_NOME"		):SetBlock({|| cNome	})
+oReport:Section(2):Cell("F2_EMISSAO"	):SetBlock({|| dEmissao	})
+oReport:Section(2):Cell("F2_TIPO"		):SetBlock({|| cTipo	})
+
+oReport:Section(2):Section(1):Cell("CCOD"		):SetBlock({|| cCod				})
+oReport:Section(2):Section(1):Cell("CDESC"		):SetBlock({|| cDesc			})
+oReport:Section(2):Section(1):Cell("NQUANT"	):SetBlock({|| nQuant			})
+oReport:Section(2):Section(1):Cell("NPRCVEN"	):SetBlock({|| nPrcVen			})
+#IFNDEF TOP
+	oReport:Section(2):Section(1):Cell("NTOTAL"	):SetBlock({||xMoeda((cAliasSD2)->D2_TOTAL,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO, TAMSX3("D2_TOTAL")[2] ) })
+#ELSE
+	oReport:Section(2):Section(1):Cell("NTOTAL"	):SetBlock({|| xMoeda((cAliasQry)->D2_TOTAL,1,MV_PAR13,(cAliasQry)->D2_EMISSAO, TAMSX3("D2_TOTAL")[2]) })
+#ENDIF 
+oReport:Section(2):Section(1):Cell("CLOCAL"	):SetBlock({|| cLocal			})
+oReport:Section(2):Section(1):Cell("CCF"		):SetBlock({|| cCF				})
+oReport:Section(2):Section(1):Cell("CTES"		):SetBlock({|| cTes				})
+oReport:Section(2):Section(1):Cell("CPEDIDO"	):SetBlock({|| cPedido			})
+oReport:Section(2):Section(1):Cell("CITEMPV"	):SetBlock({|| cItemPV			})
+oReport:Section(2):Section(1):Cell("NVALIPI"	):SetBlock({|| nValIPI			})
+oReport:Section(2):Section(1):Cell("NVALICM"	):SetBlock({|| nValIcm			})
+oReport:Section(2):Section(1):Cell("NVALISS"	):SetBlock({|| nVlrISS			})
+oReport:Section(2):Section(1):Cell("NDESACES"	):SetBlock({|| nAcN3			})
+#IFNDEF TOP
+	oReport:Section(2):Section(1):Cell("NACN6"		):SetBlock({||IIF((cAliasSD2)->D2_TIPO $ "P",xMoeda((cAliasSD2)->D2_VALIPI,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO),xMoeda((cAliasSD2)->D2_TOTAL+(cAliasSD2)->D2_VALIPI+nTotRet,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO, TAMSX3("D2_TOTAL")[2]))})	
+#ELSE
+	oReport:Section(2):Section(1):Cell("NACN6"		):SetBlock({||IIF((cAliasQry)->D2_TIPO $ "P",xMoeda((cAliasQry)->D2_VALIPI,1,MV_PAR13,(cAliasQry)->D2_EMISSAO),xMoeda((cAliasQry)->D2_TOTAL+(cAliasQry)->D2_VALIPI+nTotRet,1,MV_PAR13,(cAliasQry)->D2_EMISSAO, TAMSX3("D2_TOTAL")[2]))})
+#ENDIF
+        
+oReport:Section(3):Cell("CCOD"		)
+oReport:Section(3):Cell("CDESC"		)
+oReport:Section(3):Cell("NACD1"		):SetBlock({|| nAcD1			})
+oReport:Section(3):Cell("NPRCVEN"	)
+oReport:Section(3):Cell("NACD2"		):SetBlock({|| nAcD2 			})
+oReport:Section(3):Cell("CLOCAL"	)
+oReport:Section(3):Cell("CCF"		)
+oReport:Section(3):Cell("CTES"		)
+oReport:Section(3):Cell("CPEDIDO"	)
+oReport:Section(3):Cell("CITEMPV"	)
+oReport:Section(3):Cell("NACD5"		):SetBlock({|| nAcD5			})
+oReport:Section(3):Cell("NACD4"		):SetBlock({|| nAcD4			})
+oReport:Section(3):Cell("NACD7"		):SetBlock({|| nAcD7			})
+oReport:Section(3):Cell("NACD3"		):SetBlock({|| nAcD3			})
+oReport:Section(3):Cell("NACD6"		):SetBlock({|| nAcD6 			})
+            
+
+//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+//³Filtragem do relatório                                                  ³
+//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+#IFDEF TOP
+		
+	//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+	//³Query do relatório da secao 1 - SINTETICO                               ³
+	//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+	lQuery	:= .T.
+	cAliasSD2 := cAliasQry
+	cWhere :="%"
+	If MV_PAR15 == 2
+		cWhere += "AND F2_TIPO<>'D'"
+	EndIf
+	cWhere += " AND NOT ("+IsRemito(2,"F2_TIPODOC")+")"
+	cWhere +="%"
+
+	//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+	//³Transforma parametros Range em expressao SQL                            ³
+	//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+	MakeSqlExpr(oReport:uParam)
+		
+	oReport:Section(2):BeginQuery()	
+	BeginSql Alias cAliasQry
+	SELECT F2_DOC,F2_SERIE,F2_EMISSAO,F2_TIPO,F2_ICMSRET,F2_CLIENTE,F2_LOJA
+		,F2_FRETE,F2_FRETAUT,F2_ICMAUTO,F2_VALBRUT,F2_VALIPI,F2_VALICM,F2_VALISS
+		,D2_DOC,D2_SERIE,D2_COD,D2_GRUPO,D2_TP,D2_TIPO,D2_CLIENTE,D2_LOJA,D2_GRADE
+		,D2_CF,D2_TES,D2_LOCAL,D2_PRCVEN,D2_ICMSRET,D2_QUANT,D2_TOTAL,D2_EMISSAO
+		,D2_VALIPI,D2_CODISS,D2_VALISS,D2_VALICM,D2_ITEM,F2_FRETE,F2_SEGURO,F2_DESPESA, D2_GRADE,D2_PEDIDO, D2_ITEMPV
+		,B1_DESC, A1_NOME, A1_COD, A1_LOJA, B1_POSIPI, D2_BASEICM, D2_PICM
+	FROM %Table:SD2% SD2, %Table:SB1% SB1, %Table:SF2% SF2
+
+	LEFT JOIN %Table:SA1% SA1
+		ON	A1_FILIAL	= %xFilial:SA1% 
+		AND A1_COD		= F2_CLIENTE
+		AND	A1_LOJA		= F2_LOJA  
+		AND SA1.%notdel%
+		WHERE F2_FILIAL = %xFilial:SF2%
+		AND F2_DOC >= %Exp:mv_par01% AND F2_DOC <= %Exp:mv_par02%
+		AND F2_EMISSAO >= %Exp:DtoS(mv_par03)% AND F2_EMISSAO <= %Exp:DtoS(mv_par04)%
+		AND F2_SERIE >= %Exp:mv_par06% AND F2_SERIE <= %Exp:mv_par07%
+		AND SF2.%notdel%
+		AND D2_FILIAL = %xFilial:SD2% 
+		AND D2_CLIENTE = F2_CLIENTE AND D2_LOJA = F2_LOJA
+		AND D2_DOC = F2_DOC AND D2_SERIE = F2_SERIE
+		AND SD2.%notdel%       
+		AND B1_FILIAL = %xFilial:SB1%
+		AND B1_COD = D2_COD
+		AND SB1.%notdel%       
+		%Exp:cWhere%	
+	ORDER BY SF2.F2_EMISSAO,SF2.F2_DOC,SF2.F2_SERIE,SD2.D2_COD,SD2.D2_ITEM
+	EndSql       
+	oReport:Section(2):EndQuery({mv_par16,mv_par05,mv_par10,mv_par11})
+  
+#ENDIF
+
+#IFDEF TOP
+	TRPosition():New(oReport:Section(2),"SA1",1,{|| xFilial("SA1") + (cAliasQry)->F2_CLIENTE+(cAliasQry)->F2_LOJA })
+	TRPosition():New(oReport:Section(2),"SD2",3,{|| xFilial("SD2") + (cAliasQry)->F2_DOC+(cAliasQry)->F2_SERIE+(cAliasQry)->F2_CLIENTE+(cAliasQry)->F2_LOJA+(cAliasSD2)->D2_COD+(cAliasSD2)->D2_ITEM })		
+	TRPosition():New(oReport:Section(2),"SF2",1,{|| xFilial("SF2") + (cAliasQry)->F2_DOC+(cAliasQry)->F2_SERIE+(cAliasQry)->F2_CLIENTE+(cAliasQry)->F2_LOJA})		
+	TRPosition():New(oReport:Section(2):Section(1),"SB1",1,{|| xFilial("SB1") + (cAliasQry)->D2_COD })
+	TRPosition():New(oReport:Section(2):Section(1),"SD2",3,{|| xFilial("SD2") + (cAliasQry)->F2_DOC+(cAliasQry)->F2_SERIE+(cAliasQry)->F2_CLIENTE+(cAliasQry)->F2_LOJA+(cAliasSD2)->D2_COD+(cAliasSD2)->D2_ITEM })		
+	TRPosition():New(oReport:Section(2):Section(1),"SF2",1,{|| xFilial("SF2") + (cAliasQry)->F2_DOC+(cAliasQry)->F2_SERIE+(cAliasQry)->F2_CLIENTE+(cAliasQry)->F2_LOJA})		
+#ENDIF
+
+//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+//³Inicio da impressao do fluxo do relatório                               ³
+//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+oReport:SetMeter((cAliasQry)->(LastRec()))
+dbSelectArea(cAliasQry)
+nAcN1		:= 0; nAcN2	:= 0; nAcN3	:= 0; nAcN4	:= 0; nAcN5	:= 0; nAcN6	:= 0
+If !lQuery
+	cExpr := IIf(!Empty(mv_par05),mv_par05,"")
+	cExpr += IIf(!Empty(cExpr),IIf(!Empty(mv_par10)," .AND. "+mv_par10,""),IIf(!Empty(mv_par10),mv_par10,""))
+	cExprGrade := cExpr	
+	cExpr += IIf(!Empty(cExpr),IIf(!Empty(mv_par11)," .AND. "+mv_par11,""),IIf(!Empty(mv_par11),mv_par11,""))
+EndIf 
+
+While !oReport:Cancel() .And. !(cAliasQry)->(Eof())
+
+	IF (cAliasQry)->F2_TIPO $ "BD"
+		dbSelectArea("SA2")
+		dbSetOrder(1)
+		dbSeek(xFilial()+(cAliasQry)->F2_CLIENTE+(cAliasQry)->F2_LOJA)		
+		oCabec:Cell("F2_CLIENTE"):SetTitle("Fornecedor")           
+		cNome := SA2->A2_NOME		
+	else
+		dbSelectArea("SA1")
+		dbSetOrder(1)
+		dbSeek(xFilial()+(cAliasQry)->F2_CLIENTE+(cAliasQry)->F2_LOJA)		
+		oCabec:Cell("F2_CLIENTE"):SetTitle("Cliente")
+		cNome := SA1->A1_NOME		
+	EndIf
+	
+	dbSelectArea(cAliasQry)	
+	If !lQuery
+		dbSelectArea("SD2")
+		dbSetOrder(3)
+		dbSeek(cFilial+(cAliasQry)->F2_DOC+(cAliasQry)->F2_SERIE)
+	Endif
+
+	nTotRet		:= 0
+	nCt			:= 1      
+	dEmisAnt	:= (cAliasQry)->F2_EMISSAO
+	cNota		:= (cAliasQry)->F2_DOC
+	cSerie		:= (cAliasQry)->F2_SERIE
+	nFrete		:= (cAliasQry)->F2_FRETE
+	nICMSRet	:= (cAliasQry)->F2_ICMSRET	
+	nFretAut	:= (cAliasQry)->F2_FRETAUT	
+	nIcmAuto	:= (cAliasQry)->F2_ICMAUTO
+	nSeguro		:= (cAliasQry)->F2_SEGURO
+	nDespesa	:= (cAliasQry)->F2_DESPESA
+	nValIPIF2	:= (cAliasQry)->F2_VALIPI
+	nValICMF2	:= (cAliasQry)->F2_VALICM
+	nValISSF2	:= (cAliasQry)->F2_VALISS
+	cTipoNF		:= (cAliasQry)->F2_TIPO
+	dEmissao    := (cAliasQry)->F2_EMISSAO
+	cTipo	    := (cAliasQry)->F2_TIPO
+	cCliente	:= (cAliasQry)->F2_CLIENTE
+	cLoja		:= (cAliasQry)->F2_LOJA		
+
+	oReport:Section(2):Init()
+	oReport:Section(2):Section(1):Init()
+      
+	lFirst := .T.  	
+	
+	While !Eof() .and. D2_DOC+D2_SERIE == cNota+cSerie
+
+		If !lQuery
+			If !Empty(cExpr)
+				If !(&(cExpr)) .Or. D2_SERIE < mv_par06 .Or. D2_SERIE > mv_par07
+					dbSkip()
+					Loop
+				Endif
+			Else
+				If D2_SERIE < mv_par06 .Or. D2_SERIE > mv_par07
+					dbSkip()
+					Loop
+				Endif
+			Endif
+		Endif  
+		
+		//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+		//³ Valida o produto conforme a mascara       ³
+		//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+		lRet:=ValidMasc((cAliasSD2)->D2_COD,MV_PAR08)
+		If !lRet
+			dbSkip()
+			Loop
+		Endif
+
+		cNumPed  := D2_PEDIDO
+		nTotQuant:= 0
+		nTotal   := 0
+		nTotICM  := 0
+		nTotIPI  := 0
+
+		dbSelectArea("SF4")
+		dbSetOrder(1)
+		dbSeek(xFilial("SF4") + (cAliasSD2)->D2_TES)
+		If SF4->F4_INCSOL == "S"
+			nTotRet += (cAliasSD2)->D2_ICMSRET
+		Endif	
+
+		nReg := 0    
+		dbSelectArea(cAliasQry)
+		
+		//agrupando resumo específico sentax
+		
+		If len(aResumo) > 0 .AND. aScan(aResumo,{|x| x[1] == (cAliasSD2)->D2_COD .AND. x[7] == (cAliasSD2)->D2_PICM;
+										.AND. x[9] == (cAliasSD2)->D2_CF}) > 0
+		
+			nItem := aScan(aResumo,{|x| x[1] == (cAliasSD2)->D2_COD .AND. x[7] == (cAliasSD2)->D2_PICM .AND. x[9] == (cAliasSD2)->D2_CF})
+			aResumo[nItem][4] += (cAliasSD2)->D2_QUANT
+			aResumo[nItem][5] += (cAliasSD2)->D2_TOTAL
+			aResumo[nItem][6] += (cAliasSD2)->D2_BASEICM
+			aResumo[nItem][8] += (cAliasSD2)->D2_VALICM
+		
+		Else
+		
+			AADD(aResumo, {(cAliasSD2)->D2_COD,;
+							 (cAliasSD2)->B1_DESC,;
+							 (cAliasSD2)->B1_POSIPI,;
+							 (cAliasSD2)->D2_QUANT,;
+							 (cAliasSD2)->D2_TOTAL,;
+							 (cAliasSD2)->D2_BASEICM,;
+							 (cAliasSD2)->D2_PICM,;
+							 (cAliasSD2)->D2_VALICM,;
+							 (cAliasSD2)->D2_CF})
+		
+		Endif
+		If (cAliasSD2)->D2_GRADE == "S" .And. MV_PAR09 == 1
+			cProdRef:= Substr((cAliasSD2)->D2_COD,1,nTamRef)
+			While !Eof() .And. cProdRef == Substr((cAliasSD2)->D2_COD,1,nTamRef) ;
+					.And. (cAliasSD2)->D2_GRADE == "S" .And. cNumPed == (cAliasSD2)->D2_PEDIDO
+				nTotQuant+= (cAliasSD2)->D2_QUANT
+				nTotal   += (cAliasSD2)->D2_TOTAL
+				nTotIPI  += (cAliasSD2)->D2_VALIPI
+
+				If Empty((cAliasSD2)->D2_CODISS) .And. (cAliasSD2)->D2_VALISS == 0 // ISS
+					nTotIcm  += (cAliasSD2)->D2_VALICM
+				EndIf
+				nReg     := Recno()
+				dbSkip()
+
+				If !lQuery .And. !Empty(cExprGrade)
+					If !(&(cExprGrade))
+						dbSkip()
+						Loop
+					Endif
+				EndIf	
+				
+				//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+				//³ Valida o produto conforme a mascara       ³
+				//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+				lRet:=ValidMasc((cAliasSD2)->D2_COD,MV_PAR08)
+				If !lRet
+					dbSkip()
+					Loop
+				Endif
+				
+			End
+			
+			If !lQuery
+				If nReg > 0
+					dbGoto(nReg)
+					nReg:=0
+				Endif
+				
+				dbSelecTArea("SB1")
+				dbSetOrder(1)
+				dbSeek(xFilial("SB1")+(cAliasSD2)->D2_COD)
+			Endif
+    		nAcN1 += nTotQuant
+    		
+			If SF4->F4_AGREG <> "N"   
+			   nAcN2 += xMoeda(nTotal	,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO)
+			   If SF4->F4_AGREG == "D"
+				   nAcN2 -= xMoeda(nTotICM,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO)
+			   EndIf
+            EndIf
+
+			nAcN4 += xMoeda(nTotICM,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO)
+			nAcN5 += xMoeda(nTotIPI,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO)
+
+			cCod	:= (cAliasSD2)->D2_COD
+			If mv_par12 == 1
+				dbSelectArea("SB1");dbSetOrder(1);dbSeek(xFilial()+(cAliasSD2)->D2_COD)
+	    	    cDesc := B1_DESC
+			Else
+				dbSelectArea("SA7");dbSetOrder(2)
+				If dbSeek(xFilial()+(cAliasSD2)->D2_COD+(cAliasQry)->F2_CLIENTE+(cAliasQry)->F2_LOJA)
+	        	    cDesc := A7_DESCCLI
+				Else
+					dbSelectArea("SB1");dbSetOrder(1);dbSeek(xFilial()+(cAliasSD2)->D2_COD)
+	    	        cDesc := B1_DESC
+				Endif
+			Endif
+			
+			nQuant	:= (cAliasSD2)->D2_QUANT			
+			nPrcVen	:= xMoeda((cAliasSD2)->D2_PRCVEN  ,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO)
+			cLocal	:= (cAliasSD2)->D2_LOCAL
+			nAcN2	:= xMoeda((cAliasSD2)->D2_TOTAL  ,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO)
+			cCF		:= (cAliasSD2)->D2_CF
+			cTes	:= (cAliasSD2)->D2_TES
+			cPedido	:= (cAliasSD2)->D2_PEDIDO
+			cItemPV	:= (cAliasSD2)->D2_ITEMPV
+			nVlrISS	:= xMoeda(nValISS,1,MV_PAR13,dEmiDia)
+			
+			If lRet .And. lFirst
+				oReport:Section(2):PrintLine()
+				  lFirst := .F.
+			Endif
+			
+			oReport:Section(2):Section(1):PrintLine()
+			
+		Else
+    		
+			cCod	:= (cAliasSD2)->D2_COD
+			If mv_par12 == 1
+				dbSelectArea("SB1");dbSetOrder(1);dbSeek(xFilial()+(cAliasSD2)->D2_COD)
+	    	    cDesc := B1_DESC
+			Else
+				dbSelectArea("SA7");dbSetOrder(2)
+				If dbSeek(xFilial()+(cAliasSD2)->D2_COD+(cAliasQry)->F2_CLIENTE+(cAliasQry)->F2_LOJA)
+	        	    cDesc := A7_DESCCLI
+				Else
+					dbSelectArea("SB1");dbSetOrder(1);dbSeek(xFilial()+(cAliasSD2)->D2_COD)
+	    	        cDesc := B1_DESC
+				Endif
+			Endif
+	
+			nQuant	:= (cAliasSD2)->D2_QUANT
+			nPrcVen	:= xMoeda((cAliasSD2)->D2_PRCVEN  ,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO, TAMSX3("D2_PRCVEN")[2])
+			cLocal	:= (cAliasSD2)->D2_LOCAL
+			nTotal	:= xMoeda((cAliasSD2)->D2_TOTAL,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO, TAMSX3("D2_TOTAL")[2])
+			cCF		:= (cAliasSD2)->D2_CF
+			cTes	:= (cAliasSD2)->D2_TES
+			cPedido	:= (cAliasSD2)->D2_PEDIDO
+			cItemPV	:= (cAliasSD2)->D2_ITEMPV
+			nValIpi	:= xMoeda((cAliasSD2)->D2_VALIPI,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO)	
+			nValIcm	:= IIF (SF4->F4_ICM == "S",xMoeda((cAliasSD2)->D2_VALICM,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO),0)
+			nVlrISS	:= IIF (SF4->F4_ISS == "S",xMoeda((cAliasSD2)->D2_VALISS,1,MV_PAR13,dEmiDia),0)			
+			
+			If lRet .And. lFirst
+				oReport:Section(2):PrintLine()
+				lFirst := .F.
+			Endif
+			
+			oReport:Section(2):Section(1):PrintLine()
+			
+			nAcN1 += (cAliasSD2)->D2_QUANT
+
+			If SF4->F4_AGREG <> "N"   
+   			   nAcN2 += xMoeda((cAliasSD2)->D2_TOTAL,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO, TAMSX3("D2_TOTAL")[2])   //IIF(!((cAliasQry)->F2_TIPO $ "IP"),xMoeda((cAliasSD2)->D2_TOTAL,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO, TAMSX3("D2_TOTAL")[2]),0)
+				If SF4->F4_AGREG = "D"
+					nAcN2 -= xMoeda((cAliasSD2)->D2_VALICM,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO)
+				EndIf
+			Endif
+		
+			If Empty((cAliasSD2)->D2_CODISS) .And. (cAliasSD2)->D2_VALISS == 0 // ISS
+				nAcN4 += xMoeda((cAliasSD2)->D2_VALICM,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO)
+			EndIf
+
+			nAcN5 += xMoeda((cAliasSD2)->D2_VALIPI,1,MV_PAR13,(cAliasSD2)->D2_EMISSAO)
+
+		Endif
+		dEmiDia := (cAliasSD2)->D2_EMISSAO
+		
+		dbSelectArea(cAliasSD2)
+		If nReg==0
+			dbSkip()
+		Endif
+
+    EndDo
+
+	nAcN3 := 0
+	If (nAcN2+nAcN4+nAcN5) # 0
+
+		//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+		//³ Se nota tem ICMS Solidario, imprime.			             ³
+		//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+		If nICMSRet > 0
+			oReport:PrintText(STR0052 + " ------------> " + Str(nICMSRet,14,2))		// ICMS SOLIDARIO
+		EndIf	
+
+		//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+		//³ Se nota tem ICMS Ref.Frete Autonomo, imprime.                ³
+		//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+		If nICMAuto > 0
+			oReport:PrintText(STR0053 + " ------------> " + Str(nICMAuto,14,2))		// ICMS REF.FRETE AUTONOMO
+		EndIf
+
+		nAcN3 := xMoeda(nFrete+nSeguro+nDespesa,1,MV_PAR13,dEmiDia)
+		If nAcN3 != 0 .Or. nFretAut != 0
+			nIPIDesp := xMoeda(nValIPI,1,MV_PAR13,dEmiDia) - nAcN5
+			nICMDesp := xMoeda(nValICM,1,MV_PAR13,dEmiDia) - nAcN4
+			nAcN5 := xMoeda(nValIPIF2,1,MV_PAR13,dEmiDia)
+			nAcN4 := xMoeda(nValICMF2,1,MV_PAR13,dEmiDia)
+			
+			If nIPIDesp > 0
+				oReport:PrintText(STR0032 + " ------------> IPI           : " + Str(nIPIDesp,14,2) )	// DESPESAS ACESSORIAS
+			EndIf
+			If 	nICMDesp > 0
+				oReport:PrintText(STR0032 + " ------------> ICM            : " + Str(nICMDesp,14,2)  )	// DESPESAS ACESSORIAS
+			EndIf
+			If 	(nAcN3+nFretAut) > 0
+				oReport:PrintText(STR0032 + " ------------> OUTRAS DESPESAS: " + Str(nAcN3+nFretAut,14,2)  )	// DESPESAS ACESSORIAS
+			EndIf	
+			
+		EndIf
+		
+		nAcN6 := nAcN2 + nAcN3 + nAcN5 + xMoeda(nTotRet,1,MV_PAR13,dEmiDia) +If(lFretAut,nIcmAuto,0)
+		nVlrISS:= xMoeda(nValISSF2,1,MV_PAR13,dEmiDia)
+		
+		// Total da Nota
+		oReport:Section(2):Section(1):SetTotalText(STR0048 +  cNota + "/" + cSerie)
+		oReport:Section(2):Section(1):Finish()    
+		oReport:Section(2):Finish()
+		
+		
+		nAcN3 += nFretAut
+
+		If (nICMSRet > 0) .Or. (nICMAuto > 0) .Or. (nAcN3 != 0 .Or. nFretAut != 0)
+		   oReport:SkipLine(1)
+		EndIf
+	EndIf
+
+	nAcD1 += nAcN1
+	nAcD2 += IIF(cTipoNF $ "IP",0,nAcN2)
+	nAcD3 += nAcN3
+	nAcD4 += nAcN4
+	nAcD5 += nAcN5
+	nAcD6 += IIF(cTipoNF $ "IP",0,nAcN6)
+	nAcD7 += nVlrISS
+
+	nAcn1		:= 0
+	nAcn2		:= 0
+	nAcn3		:= 0
+	nAcn4		:= 0
+	nAcn5		:= 0
+	nAcn6		:= 0
+    nVlrISS		:= 0
+	
+	dbSelectArea(cAliasQry)
+	If !lQuery
+		dbSkip()
+	Endif
+
+	If nAcd1+nAcD4+nAcD5 > 0 .And. ( dEmisAnt != (cAliasQry)->F2_EMISSAO .Or. Eof() )
+                        
+		oReport:Section(3):SetHeaderSection(.F.)
+		oReport:PrintText(STR0034 +  DtoC(dEmisAnt))
+		oReport:FatLine() 
+		oReport:Section(3):Init()
+	   	oReport:Section(3):PrintLine()	   			
+		oReport:Section(3):Finish()
+		oReport:SkipLine(3)		
+		
+		nAcD1 	:= 0
+		nAcD2 	:= 0
+		nAcD3 	:= 0
+		nAcD4 	:= 0
+		nAcD5 	:= 0
+		nAcD6 	:= 0
+		nAcD7 	:= 0
+		
+	EndIf	
+
+	oReport:IncMeter()
+EndDo
+
+
+
+oReport:Section(2):SetPageBreak(.T.) 
+
+aSort(aResumo,,,{|x,y|x[1] < y[1]})
+
+oReport:PrintText("Totalizador por Item")		
+oReport:ThinLine()
+oReport:SkipLine()
+oResumo:Init()
+
+For nItem := 1 to len(aResumo)
+
+	oResumo:Cell("CCOD"):SetValue(aResumo[nItem][1])
+	oResumo:Cell("CDESC"):SetValue(aResumo[nItem][2])
+	oResumo:Cell("CNCM"):SetValue(aResumo[nItem][3])
+	oResumo:Cell("NQUANT"):SetValue(aResumo[nItem][4])
+	oResumo:Cell("NTOTAL"):SetValue(aResumo[nItem][5])
+	oResumo:Cell("NBASEICM"):SetValue(aResumo[nItem][6])
+	oResumo:Cell("NALIQICM"):SetValue(aResumo[nItem][7])
+	oResumo:Cell("NVALORICM"):SetValue(aResumo[nItem][8])
+	oResumo:Cell("CCFOP"):SetValue(aResumo[nItem][9])
+	
+	oResumo:PrintLine()
+
+Next nItem
+
+oResumo:Finish()
+
+
+
+Return
+
+Return()
+
+
+
+
+
+
+
+
+
+
+
+

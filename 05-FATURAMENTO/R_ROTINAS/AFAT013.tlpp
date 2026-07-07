@@ -1,0 +1,41 @@
+#INCLUDE "TOTVS.CH"
+
+/*/{Protheus.doc} AFAT013
+    Remoção do pedido de venda da regra de bloqueio para edição
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 9/11/2025
+/*/
+User Function AFAT013()
+
+    Local aArea := FWGetArea()
+
+    If Empty(SC5->C5_NOTA) .And. cFilAnt == "020201"
+
+        If !Empty(SC5->C5_XSTAWMS)
+
+            If FWAlertYesNo("Remoção do flag de bloqueio de edição do pedido enviado ao WMS. Deseja prosseguir?", "AFAT013-02")
+
+                Reclock("SC5",.F.)
+                    SC5->C5_XSTAWMS := "R"                
+                SC5->(MSUnlock())
+
+                FWAlertSuccess("Atualização realizada com sucesso!", "AFAT013-03")
+            End
+
+        Else
+
+          FWAlertInfo("Pedido sem rastreio de integração!", "AFAT013-01") 
+
+        End
+
+    Else
+
+        FWAlertError("PEDIDO FATURADO! Ação não permitida!", "AFAT013-04")  
+
+    End
+
+    FwRestArea( aArea)
+
+Return

@@ -1,0 +1,871 @@
+#include "totvs.ch"
+#include "tlpp-core.th"
+#include "tlpp-rest.th"
+
+namespace Custom.Vendas
+
+/*/{Protheus.doc} SuzanoSellOutController
+    CONTROLLER REST - Endpoints Suzano
+    @type class
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/30/2026
+/*/
+class SuzanoSellOutController
+
+	Public Data cDataDe  as Character
+	Public Data cDataAte as Character
+
+    public method New() as object
+
+    @Get(endpoint="/custom/get/Suzano/Sell-Out", description="Sell-Out and Stock - Suzano")
+    public method GetSellOut() as object
+
+    @Get(endpoint="/custom/get/Suzano/Estoque", description="Estoque - Suzano")
+    public method GetEstoque() as object
+
+    @Get(endpoint="/custom/get/Suzano/Painel", description="Painel - Suzano")
+    public method GetPainel() as object
+
+endclass
+
+method New() class SuzanoSellOutController
+
+    ::cDataDe  := ""//DTOS(Date() - GetNewPar("ST_SUZAN01",60))
+    ::cDataAte := ""//DTOS(Date())
+
+Return Self
+
+/*/{Protheus.doc} SuzanoSellOutController::GetSellOut
+    GET /custom/get/Suzano/Sell-Out
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/30/2026
+/*/
+method GetSellOut() class SuzanoSellOutController
+
+    local oVendas   as object
+    local cJson     as character
+    local cJsonUTF8 as character
+    local cParamDe  as character
+    local cParamAte as character
+    local jQuery    as object
+
+    // Lê os parãmetros DataDe e DataAte enviados via query string
+    // Formato esperado: YYYY-MM-DD (ISO 8601), ex: 2025-01-31
+    jQuery    := oRest:getQueryRequest()
+    cParamDe  := jQuery["DataDe"]
+    cParamAte := jQuery["DataAte"]
+
+    // Garante que os valores sejam character (JsonObject retorna Nil se a chave não existir)
+    if ValType(cParamDe)  != "C" ; cParamDe  := "" ; endif
+    if ValType(cParamAte) != "C" ; cParamAte := "" ; endif    
+
+    // Converte de YYYY-MM-DD para YYYYMMDD (formato interno DTOS do Protheus)
+    cParamDe  := StrTran(AllTrim(cParamDe) , "-", "")
+    cParamAte := StrTran(AllTrim(cParamAte), "-", "")
+
+    // Valida presença obrigatória dos parâmetros
+    if Empty(cParamDe) .or. Empty(cParamAte)
+        oRest:setStatusCode(400)
+        oRest:setKeyHeaderResponse("Content-Type"    , "application/json; charset=utf-8")
+        oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+        oRest:setResponse('{"status":"erro","mensagem":"Os parametros DataDe e DataAte sao obrigatorios. Formato esperado: YYYY-MM-DD."}')
+        Return
+    endif
+
+    // Valida se DataDe é uma data válida
+    if Len(cParamDe) <> 8 .or. StoD(cParamDe) == CtoD("")
+        oRest:setStatusCode(400)
+        oRest:setKeyHeaderResponse("Content-Type"    , "application/json; charset=utf-8")
+        oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+        oRest:setResponse('{"status":"erro","mensagem":"DataDe invalida. Formato esperado: YYYY-MM-DD."}')
+        Return
+    endif
+
+    // Valida se DataAte é uma data válida
+    if Len(cParamAte) <> 8 .or. StoD(cParamAte) == CtoD("")
+        oRest:setStatusCode(400)
+        oRest:setKeyHeaderResponse("Content-Type"    , "application/json; charset=utf-8")
+        oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+        oRest:setResponse('{"status":"erro","mensagem":"DataAte invalida. Formato esperado: YYYY-MM-DD."}')
+        Return
+    endif
+
+    // Valida consistência: DataDe não pode ser maior que DataAte
+    if cParamDe > cParamAte
+        oRest:setStatusCode(400)
+        oRest:setKeyHeaderResponse("Content-Type"    , "application/json; charset=utf-8")
+        oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+        oRest:setResponse('{"status":"erro","mensagem":"DataDe nao pode ser maior que DataAte."}')
+        Return
+    endif
+
+    // Atribui os valores validados às variáveis da classe
+    ::cDataDe  := cParamDe
+    ::cDataAte := cParamAte
+
+    begin sequence
+
+        oVendas := JsonVendas():New(::cDataDe, ::cDataAte)
+        cJson   := oVendas:BuildJson()
+
+        if Empty(cJson) .or. cJson == "[]"
+            oRest:setStatusCode(204)
+            oRest:setKeyHeaderResponse("Content-Type"    , "application/json; charset=utf-8")
+            oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+            oRest:setResponse('{"status":"sem dados","mensagem":"Nenhum registro encontrado."}')
+        else
+            cJsonUTF8 := EncodeUTF8(cJson, "cp1252")
+            if Empty(cJsonUTF8)
+                cJsonUTF8 := cJson
+            endif
+            oRest:setStatusCode(200)
+            oRest:setKeyHeaderResponse("Content-Type"    , "application/json; charset=utf-8")
+            oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+            oRest:setResponse(cJsonUTF8)
+        endif
+
+    recover
+
+        oRest:setStatusCode(500)
+        oRest:setKeyHeaderResponse("Content-Type"    , "application/json; charset=utf-8")
+        oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+        oRest:setResponse('{"status":"erro","mensagem":"Falha ao gerar o JSON de Sell-Out."}')
+
+    end sequence
+
+    FreeObj(oVendas)
+
+Return
+
+/*/{Protheus.doc} SuzanoSellOutController::GetEstoque
+    GET /custom/get/Suzano/Estoque
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/30/2026
+/*/
+method GetEstoque() class SuzanoSellOutController
+
+    local oEstoque  as object
+    local cJson     as character
+    local cJsonUTF8 as character
+
+    begin sequence
+
+        oEstoque := JsonEstoque():New()
+        cJson    := oEstoque:BuildJson()
+
+        if Empty(cJson) .or. cJson == "[]"
+            oRest:setStatusCode(204)
+            oRest:setKeyHeaderResponse("Content-Type"    , "application/json; charset=utf-8")
+            oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+            oRest:setResponse('{"status":"sem dados","mensagem":"Nenhum registro encontrado."}')
+        else
+            cJsonUTF8 := EncodeUTF8(cJson, "cp1252")
+            if Empty(cJsonUTF8)
+                cJsonUTF8 := cJson
+            endif
+            oRest:setStatusCode(200)
+            oRest:setKeyHeaderResponse("Content-Type"    , "application/json; charset=utf-8")
+            oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+            oRest:setResponse(cJsonUTF8)
+        endif
+
+    recover
+
+        oRest:setStatusCode(500)
+        oRest:setKeyHeaderResponse("Content-Type"    , "application/json; charset=utf-8")
+        oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+        oRest:setResponse('{"status":"erro","mensagem":"Falha ao gerar o JSON de Estoque."}')
+
+    end sequence
+
+    FreeObj(oEstoque)
+
+Return
+
+// -------------------------------------------------------------
+// GET /custom/get/Suzano/Painel
+// -------------------------------------------------------------
+method GetPainel() class SuzanoSellOutController
+
+    local oPainel   as object
+    local cJson     as character
+    local cJsonUTF8 as character
+
+    begin sequence
+
+        oPainel := JsonPainel():New()
+        cJson   := oPainel:BuildJson()
+
+        if Empty(cJson) .or. cJson == "[]"
+            oRest:setStatusCode(204)
+            oRest:setKeyHeaderResponse("Content-Type"    , "application/json; charset=utf-8")
+            oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+            oRest:setResponse('{"status":"sem dados","mensagem":"Nenhum registro encontrado."}')
+        else
+            cJsonUTF8 := EncodeUTF8(cJson, "cp1252")
+            if Empty(cJsonUTF8)
+                cJsonUTF8 := cJson
+            endif
+            oRest:setStatusCode(200)
+            oRest:setKeyHeaderResponse("Content-Type"    , "application/json; charset=utf-8")
+            oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+            oRest:setResponse(cJsonUTF8)
+        endif
+
+    recover
+
+        oRest:setStatusCode(500)
+        oRest:setKeyHeaderResponse("Content-Type"    , "application/json; charset=utf-8")
+        oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+        oRest:setResponse('{"status":"erro","mensagem":"Falha ao gerar o JSON de Painel."}')
+
+    end sequence
+
+    FreeObj(oPainel)
+
+Return
+
+/*/{Protheus.doc} JsonVendas
+    Classe responsável pela construção do JSON - SELL-OUT
+    @type class
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/28/2026
+/*/
+class JsonVendas
+
+    Public Data cDataDe  as Character
+    Public Data cDataAte as Character
+
+    public method New(cDe as character, cAte as character)
+    public method BuildJson()
+
+endclass
+
+method New(cDe as character, cAte as character) class JsonVendas
+    ::cDataDe  := cDe
+    ::cDataAte := cAte
+Return Self
+
+method BuildJson() class JsonVendas
+
+    local oJsonItem    as object
+    local cJsonResult  as character
+    local cAliasVendas as character
+    local cItens       as character
+    local cClient      as character
+
+    cItens       := ""
+    cAliasVendas := GetNextAlias()
+    cClient      := '%' + FORMATIN(STRTRAN(GETMV("MV_CLIALTU"),"'",""),",") + '%'
+
+    If Select(cAliasVendas) > 0
+        (cAliasVendas)->(DbCloseArea())
+    EndIf
+
+    BeginSql Alias cAliasVendas
+
+        SELECT 
+            CNPJ_Filial_Distribuidor, CNPJ_Industria, Data_Nota_Fiscal, Numero_Nota_Fiscal,
+            Chave_NFE, EAN, Cod_interno, Nome_Produto, Unidade_Venda, Fator_Para_Pacote,
+            Tipo_Documento, Tipo_Envio, VendaBruta, VendaLiquida, VendaUnidades,
+            Preco_Sku_NF, Canal_Venda, Cod_Vendedor_Hierarquia, Cod_Fiscal_Vendedor,
+            CNPJ_PDV, Formato_PDV, Razao_Social, UF, Municipio, CEP,
+
+            CASE
+                WHEN END_LIMPO LIKE '%SN%' OR END_LIMPO LIKE '%S/N%' THEN END_LIMPO
+                WHEN END_LIMPO LIKE '% N [0-9]%'
+                    THEN LTRIM(RTRIM(LEFT(END_LIMPO, PATINDEX('% N [0-9]%', END_LIMPO))))
+                WHEN PATINDEX('%[0-9]%', END_LIMPO) > 1
+                    THEN LTRIM(RTRIM(LEFT(END_LIMPO, PATINDEX('%[0-9]%', END_LIMPO) - 1)))
+                ELSE END_LIMPO
+            END AS Endereco,
+
+            CASE
+                WHEN END_LIMPO LIKE '%SN%' OR END_LIMPO LIKE '%S/N%' THEN ''
+                WHEN END_LIMPO LIKE '% N [0-9]%'
+                    THEN LTRIM(RTRIM(SUBSTRING(END_LIMPO, PATINDEX('% N [0-9]%', END_LIMPO) + 3, LEN(END_LIMPO))))
+                WHEN PATINDEX('%[0-9]%', END_LIMPO) = 0 THEN ''
+                ELSE
+                    REVERSE(
+                        SUBSTRING(
+                            REVERSE(END_LIMPO),
+                            1,
+                            PATINDEX('%[^0-9]%', REVERSE(END_LIMPO) + 'X') - 1
+                        )
+                    )
+            END AS Numero,
+
+            Cod_Pedido, Data_Pedido
+
+        FROM (
+                //-- ===================== QUERY 1: Notas de Saída (SF2/SD2) =====================
+            SELECT
+                M0_CGC                                                                    AS CNPJ_Filial_Distribuidor,
+                '16404287091959'                                                          AS CNPJ_Industria,
+                F2_EMISSAO                                                                AS Data_Nota_Fiscal,
+                F2_DOC                                                                    AS Numero_Nota_Fiscal,
+                RTRIM(F2_CHVNFE)                                                          AS Chave_NFE,
+                CASE
+                    WHEN B1_CODGTIN <> '' THEN B1_CODGTIN 
+                    WHEN B1_CODBAR <> '' THEN B1_CODBAR 
+                    ELSE B1_COD
+                END                                                                       AS EAN,
+                RTRIM(B1_COD)                                                             AS Cod_interno,
+                RTRIM(B1_DESC)                                                            AS Nome_Produto,
+                CASE B1_UM
+                    WHEN 'PC' THEN 'PC'
+                    WHEN 'CX' THEN 'CX'
+                    WHEN 'UN' THEN 'UN'
+                    ELSE 'OT'
+                END                                                                       AS Unidade_Venda,
+                CASE B1_UM
+                    WHEN 'CX' THEN 
+                        CASE 
+                            WHEN B1_CONV = 0 THEN '1' 
+                            ELSE B1_CONV 
+                        END
+                    ELSE '1'
+                END                                                                       AS Fator_Para_Pacote,
+                CASE
+                    WHEN F2_TIPO = 'N' AND F2_STATUS IN ('C','D') THEN 'DB'
+                    WHEN F2_TIPO = 'N'                            THEN 'F'
+                    WHEN F2_TIPO = 'D'                            THEN 'D'
+                    WHEN F2_TIPO = 'B'                            THEN 'B'
+                END                                                                       AS Tipo_Documento,
+                'R'                                                                       AS Tipo_Envio,       
+                D2_TOTAL                                                                  AS VendaBruta,  
+                D2_CUSTO1                                                                 AS VendaLiquida,
+                D2_QUANT                                                                  AS VendaUnidades,
+                D2_PRCVEN                                                                 AS Preco_Sku_NF,
+                '2'                                                                       AS Canal_Venda,
+                CASE 
+                    WHEN A3_GEREN = '' THEN '001' 
+                    ELSE A3_GEREN
+                END                                                                       AS Cod_Vendedor_Hierarquia,
+                C5_VEND1                                                                  AS Cod_Fiscal_Vendedor,
+                A1_CGC                                                                    AS CNPJ_PDV,
+                '52'                                                                      AS Formato_PDV,
+                A1_NOME                                                                   AS Razao_Social,
+                A1_EST                                                                    AS UF,
+                A1_MUN                                                                    AS Municipio,
+                A1_CEP                                                                    AS CEP,
+                LTRIM(RTRIM(A1_END))                                                      AS END_LIMPO,
+                RTRIM(C5_NUM)                                                             AS Cod_Pedido,
+                C5_EMISSAO                                                                AS Data_Pedido
+
+            FROM
+                %Table:SF2% SF2 (NOLOCK)
+
+            INNER JOIN
+                SYS_COMPANY
+                ON  M0_CODIGO = '01'
+                AND M0_CODFIL = F2_FILIAL
+                AND SYS_COMPANY.%NotDel%
+
+            INNER JOIN
+                %Table:SD2% SD2 (NOLOCK)
+                ON  D2_FILIAL  = F2_FILIAL
+                AND D2_DOC     = F2_DOC
+                AND D2_SERIE   = F2_SERIE
+                AND D2_CLIENTE = F2_CLIENTE
+                AND D2_LOJA    = F2_LOJA
+                AND D2_TIPO    = F2_TIPO
+                AND SD2.%NotDel%
+
+            INNER JOIN
+                %Table:SB1% SB1 (NOLOCK)
+                ON  B1_COD     = D2_COD
+                AND (
+                    B1_GRUPO BETWEEN '0402' AND '0410'
+                OR B1_GRUPO BETWEEN '0421' AND '0499'
+                )
+                AND B1_MSBLQL = '2'
+                AND SB1.%NotDel%
+
+            INNER JOIN
+                %Table:SC5% SC5 (NOLOCK)
+                ON  C5_FILIAL = D2_FILIAL
+                AND C5_NUM    = D2_PEDIDO
+                AND SC5.%NotDel%
+
+	    INNER JOIN 
+            %Table:SF4% SF4 (NOLOCK)
+                ON F4_FILIAL = SUBSTRING(D2_FILIAL,1,4) 
+                AND F4_CODIGO = D2_TES 
+                AND F4_DUPLIC = 'S' 
+                AND SF4.%NotDel%
+
+            LEFT JOIN 
+                %Table:SA1% SA1 (NOLOCK)
+                ON A1_COD   = F2_CLIENTE
+                AND A1_LOJA = F2_LOJA
+                AND SA1.%NotDel%
+
+            LEFT JOIN 
+                %Table:SA3% SA3 (NOLOCK)
+                ON A3_COD = C5_VEND1 
+                AND SA3.%NotDel%
+
+            WHERE
+                SF2.%NotDel%
+                AND F2_FILIAL  = %xFilial:SF2%
+                AND F2_EMISSAO BETWEEN %Exp:Self:cDataDe% AND %Exp:Self:cDataAte%
+                AND F2_TIPO IN ('N')
+                AND F2_CLIENTE NOT IN %Exp:cClient% 
+                //and F2_DOC = '000105398'
+
+
+    UNION ALL
+
+        //===================== QUERY 2: Notas de Entrada/Devolução (SF1/SD1) =====================
+        SELECT M0_CGC                                           AS CNPJ_Filial_Distribuidor,
+            '16404287091959'                                 AS CNPJ_Industria,
+            F1_EMISSAO                                       AS Data_Nota_Fiscal,
+            F1_DOC                                           AS Numero_Nota_Fiscal,
+            F1_CHVNFE                                        AS Chave_NFE,
+            CASE 
+                WHEN B1_CODGTIN <> '' THEN B1_CODGTIN 
+                WHEN B1_CODBAR <> '' THEN B1_CODBAR 
+                ELSE B1_COD END                              AS EAN,
+            B1_COD                                           AS Cod_interno,
+            B1_DESC                                          AS Nome_Produto,
+            CASE B1_UM 
+                WHEN 'PC' THEN 'PC' 
+                    WHEN 'CX' THEN 'CX' 
+                    WHEN 'UN' THEN 'UwoN' 
+                    ELSE 'OT' 
+                END                                             AS Unidade_Venda,
+            CASE B1_UM 
+                WHEN 'CX' THEN 
+                CASE 
+                    WHEN B1_CONV = 0 THEN '1' 
+                    ELSE B1_CONV 
+                    END  
+                ELSE '1' 
+                END                                             AS Fator_Para_Pacote,
+            'D'                                              AS Tipo_Documento,
+            'R'                                              AS Tipo_Envio,
+            D1_TOTAL                                         AS VendaValorBruta,
+            D1_VUNIT                                         AS VendaValorLiquida,
+            D1_QUANT                                         AS VendaUnidades,
+            D1_VUNIT                                         AS Preco_Sku_NF,
+            '2'                                              AS Canal_Venda,
+            CASE 
+                WHEN A3_GEREN = '' THEN '001' 
+                    ELSE A3_GEREN 
+                END                                             AS Cod_Vendedor_Hierarquia,
+            C5_VEND1                                         AS Cod_Fiscal_Vendedor,
+            A1_CGC                                           AS CNPJ_PDV,
+            '52'                                             AS Formato_PDV,
+            A1_NOME                                          AS Razao_Social,
+            A1_EST                                           AS UF,
+            A1_MUN                                           AS Municipio,
+            A1_CEP                                           AS CEP,
+            LTRIM(RTRIM(A1_END))                             AS END_LIMPO,
+            RTRIM(C5_NUM)                                    AS Cod_Pedido,
+            C5_EMISSAO                                       AS Data_Pedido
+
+        FROM 
+            %Table:SF1% SF1 (NOLOCK)
+
+        INNER JOIN 
+            SYS_COMPANY 
+                ON M0_CODIGO = '01' 
+                AND M0_CODFIL = F1_FILIAL 
+                AND SYS_COMPANY.%NotDel%
+
+        INNER JOIN 
+            %Table:SD1% SD1 (NOLOCK)
+                ON D1_FILIAL = F1_FILIAL 
+                AND D1_DOC = F1_DOC 
+                AND D1_SERIE = F1_SERIE 
+                AND D1_FORNECE = F1_FORNECE 
+                AND D1_LOJA = F1_LOJA 
+                AND D1_TIPO = F1_TIPO 
+                AND SD1.%NotDel%
+
+        INNER JOIN 
+            %Table:SB1% SB1 (NOLOCK) 
+                ON B1_COD = D1_COD 
+                AND (B1_GRUPO BETWEEN '0402' AND '0410' 
+                    OR 
+                    B1_GRUPO BETWEEN '0421' AND '0499')
+                AND B1_MSBLQL = '2'
+                AND SB1.%NotDel%
+
+        INNER JOIN 
+            %Table:SC5% SC5 (NOLOCK)
+                ON C5_FILIAL = D1_FILIAL 
+                AND C5_NOTA = D1_NFORI 
+                AND C5_SERIE = D1_SERIORI 
+                AND SC5.%NotDel%
+
+	    INNER JOIN 
+            %Table:SF4% SF4 (NOLOCK)
+                ON F4_FILIAL = SUBSTRING(D1_FILIAL,1,4) 
+                AND F4_CODIGO = D1_TES 
+                AND F4_DUPLIC = 'S' 
+                AND SF4.%NotDel%
+
+        LEFT JOIN 
+            %Table:SA1% SA1 (NOLOCK) 
+                ON A1_COD = F1_FORNECE 
+                AND A1_LOJA = F1_LOJA 
+                AND SA1.%NotDel%
+
+        LEFT JOIN 
+            %Table:SA3% SA3 (NOLOCK)
+                ON A3_COD = C5_VEND1 
+                AND SA3.%NotDel%
+
+        WHERE SF1.%NotDel%
+            AND F1_FILIAL = %xFilial:SF1%
+            AND F1_EMISSAO BETWEEN %Exp:Self:cDataDe% AND %Exp:Self:cDataAte%
+            AND F1_TIPO IN ('D')
+            AND F1_FORNECE NOT IN %Exp:cClient% 
+
+        ) AS BASE
+        ORDER BY 
+            Numero_Nota_Fiscal, Data_Nota_Fiscal
+    EndSql
+
+    //CONOUT(GETLASTQUERY()[2])
+
+    While (cAliasVendas)->(!EOF())
+
+        // -------------------------------------------------------
+        // Bloco de montagem de um item
+        // -------------------------------------------------------
+        oJsonItem := JsonObject():New()
+
+        oJsonItem["CNPJ_Filial_Distribuidor"] := AllTrim((cAliasVendas)->CNPJ_Filial_Distribuidor)
+        oJsonItem["CNPJ_Industria"]           := AllTrim((cAliasVendas)->CNPJ_Industria)
+        oJsonItem["Data_Nota_Fiscal"]         := VAL((cAliasVendas)->Data_Nota_Fiscal)
+        oJsonItem["Numero_Nota_Fiscal"]       := AllTrim((cAliasVendas)->Numero_Nota_Fiscal)
+        oJsonItem["Chave_NFE"]                := AllTrim((cAliasVendas)->Chave_NFE)
+        oJsonItem["EAN"]                      := AllTrim((cAliasVendas)->EAN)
+        oJsonItem["Cod_interno"]              := AllTrim((cAliasVendas)->Cod_interno)
+        oJsonItem["Nome_Produto"]             := AllTrim((cAliasVendas)->Nome_Produto)
+        oJsonItem["Unidade_Venda"]            := AllTrim((cAliasVendas)->Unidade_Venda)
+        oJsonItem["Fator_Para_Pacote"]        := cValtoChar((cAliasVendas)->Fator_Para_Pacote)
+        oJsonItem["Tipo_Documento"]           := AllTrim((cAliasVendas)->Tipo_Documento)
+        oJsonItem["Tipo_Envio"]               := AllTrim((cAliasVendas)->Tipo_Envio)
+        oJsonItem["VendaValorBruta"]          := AllTrim(Transform((cAliasVendas)->VendaBruta, "@E 9,999,999,999,999.99"))
+        oJsonItem["VendaValorLiquida"]        := AllTrim(Transform((cAliasVendas)->VendaLiquida, "@E 9,999,999,999,999.99"))
+        oJsonItem["VendaUnidades"]            := AllTrim(Transform((cAliasVendas)->VendaUnidades, "@E 9,999,999,999,999.99"))
+        oJsonItem["Preco_Sku_NF"]             := AllTrim(Transform((cAliasVendas)->Preco_Sku_NF, "@E 9,999,999,999,999.99"))
+        oJsonItem["Canal_Venda"]              := AllTrim((cAliasVendas)->Canal_Venda)
+        oJsonItem["Cod_Vendedor_Hierarquia"]  := AllTrim((cAliasVendas)->Cod_Vendedor_Hierarquia)
+        oJsonItem["Cod_Fiscal_Vendedor"]      := AllTrim((cAliasVendas)->Cod_Fiscal_Vendedor)
+        oJsonItem["CNPJ_PDV"]                 := AllTrim((cAliasVendas)->CNPJ_PDV)
+        oJsonItem["Formato_PDV"]              := AllTrim((cAliasVendas)->Formato_PDV)
+        oJsonItem["Razao_Social"]             := AllTrim((cAliasVendas)->Razao_Social)
+        oJsonItem["UF"]                       := AllTrim((cAliasVendas)->UF)
+        oJsonItem["Municipio"]                := AllTrim((cAliasVendas)->Municipio)
+        oJsonItem["CEP"]                      := AllTrim((cAliasVendas)->CEP)
+        oJsonItem["Endereco"]                 := AllTrim((cAliasVendas)->Endereco)
+        oJsonItem["Numero"]                   := AllTrim((cAliasVendas)->Numero)
+        oJsonItem["Cod_Pedido"]               := AllTrim((cAliasVendas)->Cod_Pedido)
+        oJsonItem["Data_Pedido"]              := VAL((cAliasVendas)->Data_Pedido)
+
+        // Acumula o item na string JSON
+        if !Empty(cItens)
+            cItens += ","
+        endif
+        cItens += oJsonItem:ToJson()
+
+        FreeObj(oJsonItem)
+        // -------------------------------------------------------
+        // Fim do bloco do item
+        // -------------------------------------------------------
+
+        (cAliasVendas)->(DbSkip())
+    End
+
+    // Monta o array JSON final
+    cJsonResult := "[" + cItens + "]"
+
+    If Select(cAliasVendas) > 0
+        (cAliasVendas)->(DbCloseArea())
+    EndIf
+
+Return cJsonResult
+
+/*/{Protheus.doc} JsonEstoque
+    Classe responsável pela construção do JSON - Estoque
+    @type class
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/30/2026
+/*/
+class JsonEstoque
+
+    public method New()      
+    public method BuildJson()
+
+endclass
+
+method New() class JsonEstoque
+Return Self
+
+method BuildJson() class JsonEstoque
+
+    local oJsonItem     as object
+    local cJsonResult   as character
+    local cAliasEstoque as character
+    local cItens        as character
+
+    cItens        := ""
+    cAliasEstoque := GetNextAlias()
+
+    If Select(cAliasEstoque) > 0
+        (cAliasEstoque)->(DbCloseArea())
+    EndIf
+
+    BeginSql Alias cAliasEstoque
+
+        SELECT 
+            M0_CGC                                                  AS CNPJ_Filial_Distribuidor , 
+            '16404287091959'                                        AS CNPJ_Industria ,
+            CONVERT(VARCHAR(8), GETDATE(), 112)                     AS Data_Posicao,
+            CASE 
+                WHEN B1_CODGTIN <> '' THEN B1_CODGTIN
+                ELSE B1_COD
+                END                                                 AS EAN,
+            B1_CODBAR                                               AS DUN, //analisar
+            B1_COD                                                  AS Cod_interno,
+            ''                                                      AS Cod_Lote, 
+            ''                                                      AS Data_Validade,
+            B1_DESC                                                 AS Nome_Produto,
+            CASE B1_UM
+                WHEN 'PC' THEN 'PC'
+                WHEN 'CX' THEN 'CX'
+                WHEN 'UN' THEN 'UN'
+                ELSE 'OT'
+            END                                                     AS Unidade_Venda,
+            CASE B1_UM 
+                WHEN 'CX' THEN 
+			        CASE 
+                        WHEN B1_CONV = 0 THEN '1' 
+                        ELSE B1_CONV 
+                    END  
+		        ELSE '1' 
+            END                                                     AS Fator_Para_Pacote,
+            B2_VFIM1                                                AS PrecoTABELA, 
+            B2_CM1                                                  AS PrecoCUSTO, 
+            B2_QATU                                                 AS EstFisico,
+            '0'                                                      AS EstTransito, 
+            '0'                                                      AS EstFaturado,
+            '0'                                                      AS EstAvariado,
+            '0'                                                      AS EstReservado
+        FROM 
+            %Table:SB1% SB1 (NOLOCK)
+        INNER JOIN 
+            SYS_COMPANY 
+            ON M0_CODIGO ='01' 
+            AND M0_CODFIL = %xFilial:SB2% 
+            AND SYS_COMPANY.%NotDel%
+        INNER JOIN 
+            %Table:SB2% SB2 (NOLOCK) 
+            ON B2_FILIAL = M0_CODFIL 
+            AND B2_COD = B1_COD 
+            AND B2_LOCAL = '01' 
+            AND SB2.%NotDel%
+        WHERE 
+            SB1.%NotDel%
+            AND (
+                B1_GRUPO BETWEEN '0402' AND '0410'
+            OR B1_GRUPO BETWEEN '0421' AND '0499'
+            )
+            AND B1_MSBLQL = '2'
+        ORDER BY
+            B2_FILIAL,
+            B2_COD
+
+    EndSql
+
+    While (cAliasEstoque)->(!EOF())
+
+        // -------------------------------------------------------
+        // Bloco de montagem de um item
+        // -------------------------------------------------------
+        oJsonItem := JsonObject():New()
+
+        oJsonItem["CNPJ_Filial_Distribuidor"]   := AllTrim((cAliasEstoque)->CNPJ_Filial_Distribuidor)
+        oJsonItem["CNPJ_Industria"]             := AllTrim((cAliasEstoque)->CNPJ_Industria)
+        oJsonItem["Data_Posicao"]               := VAL((cAliasEstoque)->Data_Posicao)
+        oJsonItem["EAN"]                        := AllTrim((cAliasEstoque)->EAN)
+        oJsonItem["DUN"]                        := AllTrim((cAliasEstoque)->DUN)
+        oJsonItem["Cod_interno"]                := AllTrim((cAliasEstoque)->Cod_interno)
+        oJsonItem["Cod_Lote"]                   := AllTrim((cAliasEstoque)->Cod_Lote)
+        oJsonItem["Data_Validade"]              := AllTrim((cAliasEstoque)->Data_Validade)
+        oJsonItem["Nome_Produto"]               := AllTrim((cAliasEstoque)->Nome_Produto)
+        oJsonItem["Unidade_Venda"]              := AllTrim((cAliasEstoque)->Unidade_Venda)
+        oJsonItem["Fator_Para_Pacote"]          := cValtoChar((cAliasEstoque)->Fator_Para_Pacote)
+        oJsonItem["Preco_Sku_TABELA"]           := AllTrim(Transform((cAliasEstoque)->PrecoTABELA, "@E 9,999,999,999,999.99"))
+        oJsonItem["Preco_Sku_CUSTO"]            := AllTrim(Transform((cAliasEstoque)->PrecoCUSTO, "@E 9,999,999,999,999.99"))
+        oJsonItem["Estoque_Fisico"]             := cValtoChar((cAliasEstoque)->EstFisico)
+        oJsonItem["Estoque_Transito"]           := (cAliasEstoque)->EstTransito
+        oJsonItem["Estoque_Faturado"]           := (cAliasEstoque)->EstFaturado
+        oJsonItem["Estoque_Avariado"]           := (cAliasEstoque)->EstAvariado
+        oJsonItem["Estoque_Reservado"]          := (cAliasEstoque)->EstReservado
+
+        // Acumula o item na string JSON
+        if !Empty(cItens)
+            cItens += ","
+        endif
+        cItens += oJsonItem:ToJson()
+
+        FreeObj(oJsonItem)
+        // -------------------------------------------------------
+        // Fim do bloco do item
+        // -------------------------------------------------------
+
+        (cAliasEstoque)->(DbSkip())
+    End
+
+    // Monta o array JSON final
+    cJsonResult := "[" + cItens + "]"
+
+    If Select(cAliasEstoque) > 0
+        (cAliasEstoque)->(DbCloseArea())
+    EndIf
+
+Return cJsonResult
+
+/*/{Protheus.doc} JsonEstoque
+    Classe responsável pela construção do JSON - PAINEL
+    @type class
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/30/2026
+/*/
+class JsonPainel
+
+    public method New()     
+    public method BuildJson()
+
+endclass
+
+method New() class JsonPainel
+Return Self
+
+method BuildJson() class JsonPainel
+
+    local oJsonItem    as object
+    local cJsonResult  as character
+    local cAliasPainel as character
+    local cItens       as character
+
+    cItens       := ""
+    cAliasPainel := GetNextAlias()
+
+    If Select(cAliasPainel) > 0
+        (cAliasPainel)->(DbCloseArea())
+    EndIf
+
+    BeginSql Alias cAliasPainel
+        SELECT 
+            M0_CGC                                          AS CNPJ_Filial_Distribuidor, 
+            '16404287091959'                                AS CNPJ_Industria,
+            ''                                              AS Cod_Divisao_Industria,
+            A1_CGC                                          AS CNPJ_PDV, 
+            A1_VEND                                         AS Nivel_1_Codigo,
+            A3_NOME                                         AS Nivel_1_Nome,
+            ''                                              AS Nivel_1_Codigo_Fiscal,
+            A3_EMAIL                                        AS Nivel_1_Email,
+            ''                                              AS Nivel_1_Celular,
+            A3_GEREN                                        AS Nivel_2_Codigo,
+            ISNULL((SELECT 
+                        SA3A.A3_NOME 
+                    FROM 
+                        %Table:SA3% SA3A (NOLOCK)
+                    WHERE 
+                        SA3A.%NotDel%
+                        AND SA3A.A3_MSBLQL <> '1'
+                        AND SA3A.A3_COD = SA3.A3_GEREN
+                    ), '')                                  AS Nivel_2_Nome,
+            ''                                              AS Nivel_2_Codigo_Fiscal,
+            ISNULL((SELECT 
+                        SA3A.A3_EMAIL 
+                    FROM 
+                        %Table:SA3% SA3A (NOLOCK)
+                    WHERE 
+                        SA3A.%NotDel%
+                        AND SA3A.A3_MSBLQL <> '1'
+                        AND SA3A.A3_COD = SA3.A3_GEREN
+                    ), '')                                  AS Nivel_2_Email,
+            ''                                              AS Nivel_2_Celular,
+            ''                                              AS Nivel_3_Codigo,
+            ''                                              AS Nivel_3_Nome,
+            ''                                              AS Nivel_3_Codigo_Fiscal,
+            ''                                              AS Nivel_3_Email,
+            ''                                              AS Nivel_3_Celular
+        FROM 
+            %Table:SA1% SA1 (NOLOCK)
+        INNER JOIN 
+            SYS_COMPANY 
+            ON M0_CODIGO ='01' 
+            AND M0_CODFIL = %xFilial:SB2% 
+            AND SYS_COMPANY.%NotDel%
+        INNER JOIN 
+            %Table:SA3% SA3 (NOLOCK) 
+            ON A3_COD = A1_VEND 
+            AND A3_MSBLQL <> '1' 
+            AND SA3.%NotDel%
+        WHERE 
+            SA1.%NotDel%
+            AND A1_MSBLQL <> '1'
+        ORDER BY 
+            A1_COD
+    EndSql
+
+    While (cAliasPainel)->(!EOF())
+
+        oJsonItem := JsonObject():New()
+
+        oJsonItem["CNPJ_Filial_Distribuidor"]   := AllTrim((cAliasPainel)->CNPJ_Filial_Distribuidor)
+        oJsonItem["CNPJ_Industria"]             := AllTrim((cAliasPainel)->CNPJ_Industria)
+        oJsonItem["Cod_Divisao_Industria"]      := AllTrim((cAliasPainel)->Cod_Divisao_Industria)
+        oJsonItem["CNPJ_PDV"]                   := AllTrim((cAliasPainel)->CNPJ_PDV)
+        oJsonItem["Nivel_1_Codigo"]             := AllTrim((cAliasPainel)->Nivel_1_Codigo)
+        oJsonItem["Nivel_1_Nome"]               := AllTrim((cAliasPainel)->Nivel_1_Nome)
+        oJsonItem["Nivel_1_Codigo_Fiscal"]      := AllTrim((cAliasPainel)->Nivel_1_Codigo_Fiscal)
+        oJsonItem["Nivel_1_Email"]              := AllTrim((cAliasPainel)->Nivel_1_Email)
+        oJsonItem["Nivel_1_Celular"]            := AllTrim((cAliasPainel)->Nivel_1_Celular)
+        oJsonItem["Nivel_2_Codigo"]             := AllTrim((cAliasPainel)->Nivel_2_Codigo)
+        oJsonItem["Nivel_2_Nome"]               := AllTrim((cAliasPainel)->Nivel_2_Nome)
+        oJsonItem["Nivel_2_Codigo_Fiscal"]      := AllTrim((cAliasPainel)->Nivel_2_Codigo_Fiscal)
+        oJsonItem["Nivel_2_Email"]              := AllTrim((cAliasPainel)->Nivel_2_Email)
+        oJsonItem["Nivel_2_Celular"]            := AllTrim((cAliasPainel)->Nivel_2_Celular)
+        oJsonItem["Nivel_3_Codigo"]             := AllTrim((cAliasPainel)->Nivel_3_Codigo)
+        oJsonItem["Nivel_3_Nome"]               := AllTrim((cAliasPainel)->Nivel_3_Nome)
+        oJsonItem["Nivel_3_Codigo_Fiscal"]      := AllTrim((cAliasPainel)->Nivel_3_Codigo_Fiscal)
+        oJsonItem["Nivel_3_Email"]              := AllTrim((cAliasPainel)->Nivel_3_Email)
+        oJsonItem["Nivel_3_Celular"]            := AllTrim((cAliasPainel)->Nivel_3_Celular)
+        
+        if !Empty(cItens)
+            cItens += ","
+        endif
+
+        cItens += oJsonItem:ToJson()
+
+        FreeObj(oJsonItem)
+
+        (cAliasPainel)->(DbSkip())
+    End
+
+    // Monta o array JSON final
+    cJsonResult := "[" + cItens + "]"
+
+    If Select(cAliasPainel) > 0
+        (cAliasPainel)->(DbCloseArea())
+    EndIf
+
+Return cJsonResult

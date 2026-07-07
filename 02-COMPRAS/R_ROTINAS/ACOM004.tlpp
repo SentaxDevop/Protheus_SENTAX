@@ -1,0 +1,56 @@
+#Include "TOTVS.ch"
+
+/*/{Protheus.doc} ACOM004
+	Atualização automática do campo Risco Comercial do Cadastro do Cliente
+	@type function
+	@version 1.0
+	@author Alfred Andersen
+	@since 8/7/2025
+/*/
+User Function ACOM004(aPars)
+
+	DEFAULT aPars   := {"01","020201"}
+
+	RpcClearenv()
+
+	RpcSetType( 3 )
+	RpcSetEnv( aPars[1], aPars[2])
+
+    ACOM004A()
+
+	RpcClearEnv()
+
+Return
+
+Static Function ACOM004A()
+
+	Local cUpdate := "" as Character
+	Local nResult := 0  as Numeric
+	
+	cUpdate += "	UPDATE SA1010 																"
+	cUpdate += "	SET A1_XRISCOM = 															"
+	cUpdate += "	  CASE 																		"
+	cUpdate += "	    WHEN DATEDIFF(DAY, A1_ULTCOM, GETDATE()) BETWEEN 0 AND 90 THEN '1' 		"
+	cUpdate += "	    WHEN DATEDIFF(DAY, A1_ULTCOM, GETDATE()) BETWEEN 91 AND 120 THEN '2' 	"
+	cUpdate += "	    WHEN DATEDIFF(DAY, A1_ULTCOM, GETDATE()) BETWEEN 121 AND 180 THEN '3' 	"
+	cUpdate += "	    WHEN DATEDIFF(DAY, A1_ULTCOM, GETDATE()) > 180 THEN '4' 				"
+	cUpdate += "	    ELSE NULL 																"
+	cUpdate += "	  END 																		"
+	cUpdate += "	WHERE D_E_L_E_T_ = '' 														"
+	cUpdate += "	  AND A1_ULTCOM IS NOT NULL 												"
+
+	nResult := TcSqlExec(cUpdate)
+
+	If (nResult < 0)
+		cMensagem := TCSQLError()
+		cAssunto := "FALHA! - Atualização do Risco Comercial - Data: " + DTOC(dDatabase)
+	Else
+		cMensagem := "Atualização do Risco Comercial finalizada com sucesso!"
+		cAssunto := "SUCESSO! - Atualização do Risco Comercial - Data: " + DTOC(dDatabase)
+	EndIf
+
+	cDestinatario := GetMV("ST_MAILTI")
+
+    u_MailTo(cDestinatario, cAssunto, "", "", cMensagem, "")
+
+Return

@@ -1,0 +1,54 @@
+//Bibliotecas
+#Include "TOTVS.ch"
+ 
+/*/{Protheus.doc} User Function AFIN004
+    Criação de browse de cadastro dos bancos que são responsáveis pelas emissões dos boletos 
+    @type Function
+    @author Alfred Andersen
+    @since 12/9/2024
+    @consultancy Harpia
+    @site www.harpiaconsultoria.com
+    @see https://tdn.totvs.com/display/public/framework/FWMBrowse e https://tdn.totvs.com/pages/releaseview.action?pageId=24346981
+/*/
+User Function AFIN004()
+
+    Local aArea := FWGetArea()
+ 
+    AFIN004A()
+ 
+    FWRestArea(aArea)
+    
+Return
+
+Static Function AFIN004A()
+
+    Local aArea       := FWGetArea()
+    Local oBrowse
+    Private aRotina   := {}
+    Private cCadastro := "Banco x Boletos"
+ 
+    //Definicao do menu
+    aRotina := MenuDef()
+ 
+    //Instanciando o browse
+    oBrowse := FWMBrowse():New()
+    oBrowse:SetAlias("ZZ2")
+    oBrowse:SetDescription(cCadastro)
+    oBrowse:DisableDetails()
+ 
+    //Ativa a Browse
+    oBrowse:Activate()
+ 
+    FWRestArea(aArea)
+Return Nil
+
+Static Function MenuDef()
+    Local aRotina := {}
+ 
+    //Adicionando opcoes do menu
+    aAdd(aRotina, {"Pesquisar", "AXPESQUI", 0, 1})
+    aAdd(aRotina, {"Visualizar", "AXVISUAL", 0, 2})
+    aAdd(aRotina, {"Incluir", "AXINCLUI", 0, 3})
+    aAdd(aRotina, {"Excluir", "AXDELETA", 0, 5})
+ 
+Return aRotina

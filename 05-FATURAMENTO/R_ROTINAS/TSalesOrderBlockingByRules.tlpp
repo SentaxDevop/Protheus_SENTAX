@@ -1,0 +1,390 @@
+#INCLUDE "PROTHEUS.CH"
+#INCLUDE "TOPCONN.CH"
+#INCLUDE "FWMVCDEF.CH"
+#Include "TOTVS.ch"
+#Include "RESTFul.ch"
+
+/*/{Protheus.doc} TSalesOrderBlockingByRules
+    Classe responsável pelas novas validações do Pedido de Venda
+    @type class
+    @version 1.0
+    @author Alfred Andersen
+    @since 12/09/2023
+    @requester Kleber Moro
+    @consultancy Harpia
+    @site www.harpiaconsultoria.com
+/*/
+Class TSalesOrderBlockingByRules
+
+	Public Data cRequestNumber    as Character
+    Public Data cRequestFilial    as Character
+    Public Data cPaymentCondition as Character
+    Public Data lBlockOrder       as Logical
+	
+	Public Method New() Constructor
+	Public Method Process()
+    Public Method RequestQuery()
+    Public Method ValueRule()
+    Public Method RulesPaymentCondition()
+    Public Method LOG()
+    Public Method UpdateLog()
+
+EndClass
+
+/*/{Protheus.doc} TSalesOrderBlockingByRules::New
+Método construtor da classe
+@type method
+@version 1.0
+@author Alfred Andersen
+@since 12/09/2023
+/*/
+Method New() Class TSalesOrderBlockingByRules
+
+	::cRequestNumber    := ""
+    ::cRequestFilial    := ""
+    ::cPaymentCondition := ""
+    ::lBlockOrder       := .F.
+
+Return(Self)
+
+/*/{Protheus.doc} TSalesOrderBlockingByRules::Process
+Método centralizador da classe
+@type method
+@version 1.0
+@author Alfred Andersen
+@since 12/09/2023
+/*/
+Method Process() Class TSalesOrderBlockingByRules
+
+    Local cUpdate as Character
+    Local nUpdate as Numeric
+
+    cUpdate := ""
+    nUpdate := 0
+ 
+	ConOut("Chamada de consulta das regras de bloqueio do Pedido de venda nº " + ::cRequestNumber + " | Inicio " + DTOC(dDatabase) + " - " + TIME())
+	
+    If ::RequestQuery()
+
+        ::ValueRule()
+
+        ::RulesPaymentCondition()
+
+    End
+
+    //Executa o bloqueio do Pedido por Regra
+    If ::lBlockOrder
+
+        RecLock("SC5",.F.)
+            SC5->C5_BLQ := "1"
+        SC5->(MsUnLock())
+        
+        cUpdate := ""
+        nUpdate := 0
+
+        cUpdate += "UPDATE SC6010 "
+        cUpdate += "SET C6_BLOQUEI = " + ValToSql("01") + ""
+        cUpdate += "WHERE C6_FILIAL = " + ValToSql(Self:cRequestFilial) + " "
+        cUpdate += "AND C6_NUM = " + ValToSql(Self:cRequestNumber) + " "
+        cUpdate += "AND D_E_L_E_T_ = '' "
+
+        cUpdate := UPPER(cUpdate)
+
+        nUpdate := TcSqlExec(cUpdate)
+
+        If (nUpdate < 0)
+            ConOut("LOG DO UPDATE: " + TCSQLError())
+            Msginfo("LOG DO UPDATE: " + TCSQLError())
+        EndIf
+
+    End
+
+Return
+
+/*/{Protheus.doc} TSalesOrderBlockingByRules::RequestQuery
+    Verifica se o pedido está apto a nova consulta de bloqueio por regras
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 20/08/2023
+    @return logical, Retorna False se o pedido já estiver com algum bloqueio
+/*/
+Method RequestQuery() Class TSalesOrderBlockingByRules
+
+    Local cAlias as Character
+    Local lRetorno as Logical
+
+    cAlias := GetNextAlias()
+    lRetorno := .F.
+
+    If Select(cAlias) > 0
+        dbSelectArea(cAlias)
+        dbCloseArea()
+    Endif
+
+    BeginSql Alias cAlias
+        SELECT 
+            SC5.*
+        FROM 
+            %Table:SC5% SC5 (NOLOCK)
+        WHERE SC5.%notdel% 
+            AND C5_FILIAL = %Exp:Self:cRequestFilial%
+            AND C5_NUM = %Exp:Self:cRequestNumber%
+            AND C5_BLQ = ''
+    EndSql
+
+    If (cAlias)->(!Eof())
+
+        lRetorno := .T.
+
+    End
+
+    (cAlias)->(dbCloseArea())
+
+Return lRetorno
+
+/*/{Protheus.doc} TSalesOrderBlockingByRules::ValueRule
+    Permissão de venda no valor abaixo do parâmetro para clientes novos 
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 20/08/2023
+/*/
+Method ValueRule() Class TSalesOrderBlockingByRules
+
+    Local cAlias              as Character
+    Local cMsg                as Character
+    Local nValueFirstPurchase as Numeric
+    Local nMinimumValue       as Numeric
+    Local lFirstPurchase      as Logical
+
+    cAlias              := GetNextAlias()
+    nValueFirstPurchase := GetNewPar("ST_RULES2",350)
+    nMinimumValue       := GetNewPar("ST_RULES3",500)
+    cMsg                := ""
+    lFirstPurchase      := Empty(GetAdvFVal("SA1","A1_PRICOM",FWxFilial("SA1") + SC5->C5_CLIENTE + SC5->C5_LOJACLI,1))
+
+    If Select(cAlias) > 0
+        dbSelectArea(cAlias)
+        dbCloseArea()
+    Endif
+
+    BeginSql Alias cAlias
+        SELECT 
+            SUM(C6_VALOR) TOTAL
+        FROM 
+            %Table:SC6% SC6 (NOLOCK)
+        WHERE SC6.%Notdel% 
+            AND C6_FILIAL = %Exp:Self:cRequestFilial%
+            AND C6_NUM = %Exp:Self:cRequestNumber%
+    EndSql
+
+    If (cAlias)->(!Eof())
+
+        If lFirstPurchase
+
+            If (cAlias)->TOTAL < nValueFirstPurchase
+                
+                ::lBlockOrder := .T.
+                
+                cMsg := "Cliente em sua primeira compra, porém, o Valor do Pedido R$" + Alltrim(Transform((cAlias)->TOTAL, "@E 999,999,999.99"))
+                cMsg := cMsg + " é MENOR que o valor permitido de R$ " + Alltrim(Transform(nValueFirstPurchase, "@E 999,999,999.99"))
+
+                //Gera o log
+                ::LOG(1,dDataBase, ::cRequestFilial, ::cRequestNumber, cMsg, .T.)
+            
+            Else
+                
+                cMsg := "Cliente em sua primeira compra, Valor do Pedido R$" + Alltrim(Transform((cAlias)->TOTAL, "@E 999,999,999.99"))
+                cMsg := cMsg + " é maior que o valor mínimo de R$ " + Alltrim(Transform(nValueFirstPurchase, "@E 999,999,999.99"))
+
+                //Gera o log
+                ::LOG(1,dDataBase, ::cRequestFilial, ::cRequestNumber, cMsg, .F.)
+
+            End
+
+        Else
+
+            If (cAlias)->TOTAL < nMinimumValue
+                
+                ::lBlockOrder := .T.
+                
+                cMsg := "Valor do Pedido R$ " + Alltrim(Transform((cAlias)->TOTAL, "@E 999,999,999.99")) + " é MENOR que o valor mínimo permitido de R$ " + Alltrim(Transform(nMinimumValue, "@E 999,999,999.99"))
+
+                //Gera o log
+                ::LOG(2,dDataBase, ::cRequestFilial, ::cRequestNumber, cMsg, .T.)
+            
+            End
+
+        End
+
+    End
+
+    (cAlias)->(dbCloseArea())
+
+Return 
+
+/*/{Protheus.doc} TSalesOrderBlockingByRules::RulesPaymentCondition
+    Validações com base na condição de pagamento
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 20/08/2023
+/*/
+Method RulesPaymentCondition() Class TSalesOrderBlockingByRules
+
+    Local cPaymentConditionPayment as Character
+    Local cMsg                     as Character
+    Local aDays                    as Array
+    Local nX                       as Numeric
+    Local nCountDays               as Numeric
+    Local nMaximumInstallment      as Numeric
+    Local lNonMultipleDdays        as Logical
+
+    cPaymentConditionPayment := Alltrim(GetAdvFVal("SE4","E4_COND",FWxFilial("SE4") + Self:cPaymentCondition,1))
+    cMsg                     := ""
+    aDays                    := StrTokArr( cPaymentConditionPayment, ",")
+    nX                       := 0
+    nCountDays               := 0
+    lNonMultipleDdays        := .F.
+    nMaximumInstallment      := GetNewPar("ST_RULES4",35)
+
+    //Condição de Pagameneto à vista deve sempre ser bloqueada
+    If cPaymentConditionPayment == "00"
+
+        ::lBlockOrder := .T.
+        
+        cMsg := "Condição de Pagamento " + Self:cPaymentCondition + " à vista"
+
+        //Gera o log
+        ::LOG(3,dDataBase, ::cRequestFilial, ::cRequestNumber, cMsg, .T.)
+
+    Else
+        
+        //Controle do primeiro dia da condição de pagamento
+        nCountDays := Val(aDays[1])
+
+        For nX := 2 to Len(aDays)
+            
+            //Soma 7 dias e verifica se a condição está apta
+            If VAL(aDays[nX]) == (nCountDays + VAL("07"))
+
+                nCountDays := (nCountDays + VAL(aDays[nX]))
+            
+            Else
+                
+                lNonMultipleDdays := .T.
+
+            End
+
+        Next nX
+
+    End
+
+    //Parcelamento não poderá ser maior que o permitido 
+    If !lNonMultipleDdays .And. nCountDays > nMaximumInstallment
+
+        lNonMultipleDdays := .T.
+
+    End
+
+    If lNonMultipleDdays
+
+        ::lBlockOrder := .T.
+
+        cMsg := "Condição de Pagamento não atende as regras de parcelamento múltiplos de 07 dias. Condição de Pgto: " + Self:cPaymentCondition
+
+        //Gera o log
+        ::LOG(4,dDataBase, ::cRequestFilial, ::cRequestNumber, cMsg, .T.)
+
+    End
+
+Return
+
+/*/{Protheus.doc} TSalesOrderBlockingByRules::LOG
+    Alimenta a tabela de ocorrências do bloqueio por tipo de regra
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 21/08/2023
+    @param nOpc, numeric, 1 = Primeira Compra, 2 = Valor abaixo do mínimo, 3 = À vista, 4 = Parcelamento 
+    @param dData, variant, Data do registro
+    @param cFilial, character, Filial do Pedido
+    @param cNumeroPedido, character, Número do Pedido
+    @param cMensagem, character, Informações adicionais
+    @param lBloqueio, logical, Bloqueio do Pedido 
+/*/
+Method LOG(nOpc as Numeric, dData as Date, cFil as Character, cNumeroPedido as Character, cMensagem as Character, lBloqueio as Logical) Class TSalesOrderBlockingByRules
+
+    Local cMotivo as Character
+
+    cMotivo := ""
+
+    If nOpc == 1
+        cMotivo := "Primeira Compra"
+    ElseIf nOpc == 2
+        cMotivo := "Valor abaixo do mínimo"
+    ElseIf nOpc == 3
+        cMotivo := "À vista"
+    ElseIf nOpc == 4
+        cMotivo := "Parcelamento"
+    End
+
+    RECLOCK( "SZ2", .T. )
+        SZ2->Z2_FILIAL := cFil
+        SZ2->Z2_NUM    := cNumeroPedido
+        SZ2->Z2_MOTIVO := cMotivo
+        SZ2->Z2_STATUS := If(lBloqueio, '2' , '1' )
+        SZ2->Z2_MSG    := cMensagem
+        SZ2->Z2_DATA   := dData
+        SZ2->Z2_HORA   := TIME()
+    MSUNLOCK()
+
+Return
+
+/*/{Protheus.doc} TSalesOrderBlockingByRules::UpdateLog
+    Atualiza o status dos registros de Log
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 22/09/2023
+/*/
+Method UpdateLog() Class TSalesOrderBlockingByRules
+
+    Local cAliasLog as Character
+
+    cAliasLog := GetNextAlias()
+
+    If Select(cAliasLog) > 0
+        dbSelectArea(cAliasLog)
+        dbCloseArea()
+    Endif
+
+    BeginSql Alias cAliasLog
+        SELECT 
+            Z2_FILIAL, Z2_NUM, Z2_STATUS, SZ2.R_E_C_N_O_ RECSZ2
+        FROM 
+            %Table:SZ2% SZ2 (NOLOCK)
+        WHERE SZ2.%Notdel% 
+            AND Z2_FILIAL = %Exp:Self:cRequestFilial%
+            AND Z2_NUM = %Exp:Self:cRequestNumber%
+            AND Z2_STATUS = '2'
+    EndSql
+
+    If (cAliasLog)->(!Eof())
+
+        While (cAliasLog)->(!Eof())
+
+            SZ2->(DbGoTO((cAliasLog)->RECSZ2))
+
+            Reclock("SZ2",.F.)
+                SZ2->Z2_STATUS := '3'
+            SZ2->(MsUnLock())
+
+            (cAliasLog)->(DbSkip())
+
+        End
+
+    End
+
+Return

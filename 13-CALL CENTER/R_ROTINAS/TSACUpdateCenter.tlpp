@@ -1,0 +1,555 @@
+#INCLUDE "PROTHEUS.CH"
+#INCLUDE "TOPCONN.CH"
+#Include "TOTVS.ch"
+
+/*/{Protheus.doc} TSACUpdateCenter
+    Classe responsável pela contrução de toda funcionalidade da baixa de atendimentos (SAC)
+    @type class
+    @version 1.0
+    @author Alfred Andersen
+    @since 21/11/2023
+/*/
+Class TSACUpdateCenter
+
+	Public Data cOperator        as Character
+    Public Data cOrigin          as Character
+    Public Data cAliasTRB        as Character
+    Public Data cNameOperator    as Character
+    Public Data cCodeSAC         as Character
+    Public Data cAction          as Character
+    Public Data cMailResponsible as Character
+    Public Data cMailRequester   as Character
+    Public Data oTable           as Object
+    Public Data oBrowse          as Object
+	Public Data oDlgTela         as Object
+    Public Data aBrowse          as Array
+	Public Data aCpoInfo         as Array
+	Public Data aCpoData         as Array
+
+	Public Method New() Constructor			
+	Public Method Process()		
+    Public Method QueryData()
+    Public Method TemporaryStructure()
+    Public Method SelectionScreen()		
+    Public Method ChangeServiceStatus()
+    Public Method SendServiceUpdateEmail()
+
+EndClass
+
+/*/{Protheus.doc} TSACUpdateCenter::New
+    Metódo Construtor
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 21/11/2023
+/*/
+Method New() Class TSACUpdateCenter
+
+	::cOperator        := ""
+    ::cNameOperator    := ""
+    ::cOrigin          := ""
+    ::cCodeSAC         := ""
+    ::cAction          := ""
+    ::cMailResponsible := ""
+    ::cMailRequester   := ""
+    ::cAliasTRB        := "TRB"
+    ::oTable           := Nil
+    ::oBrowse          := Nil
+    ::oDlgTela         := Nil
+    ::aBrowse          := {}
+    ::aCpoInfo         := {}
+    ::aCpoData         := {}
+
+Return(Self)
+
+/*/{Protheus.doc} TSACUpdateCenter::Process
+    Método Matriz da classe, gerencia todos os processos em escala
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 21/11/2023
+/*/
+Method Process() Class TSACUpdateCenter
+
+    //Responsável pelos dados a serem apresentados ao usuário
+    ::QueryData()
+    
+    //O nome do operador deve existir, pois ele é o dono das pendências que serão mostradas 
+    If !EMPTY(Self:cNameOperator)
+
+        //Tela de seleção dos SAC's
+        If ::SelectionScreen()
+            
+            //Atualiza o status do SAC
+            If ::ChangeServiceStatus()  
+
+                //Realiza o envio do e-mail para o Operador e o Responsável pelo SAC
+                ::SendServiceUpdateEmail()
+
+                FWAlertSuccess("[ATMK016 - 02] Baixa do atendimento "+ ::cCodeSAC +" realizado com sucesso", "Baixar SAC")
+            Else
+
+                FWAlertError("[ATMK016 - 03] Ocorreu um erro na baixa do atendimento: " + ::cCodeSAC, "Baixar SAC")
+            End
+
+        End
+
+    Else
+    
+        FWAlertWarning("[ATMK016 - 01] Não foram encontrados pendências de SAC para o seu usuário!", "Baixar SAC")
+
+    End
+
+    //Destroy a tabela temporária 
+    If ( ValType(::oTable) <> "U" )
+		::oTable:Delete()
+		::oTable := Nil
+	Endif
+
+Return
+
+/*/{Protheus.doc} TSACUpdateCenter::QueryData
+    Consulta todas as pendências de SAC para o usuário através do seu ID User
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 21/11/2023
+/*/
+Method QueryData() Class TSACUpdateCenter
+
+	Local cAlias as Character
+
+    cAlias	:= GetNextAlias()
+
+    //Contrói a tebela temporária
+    ::TemporaryStructure()
+
+	BeginSql Alias cAlias
+        
+        COLUMN UD_DATA AS DATE
+        
+        SELECT UC_OPERADO SOLICITANTE,
+            UC_NF NOTA,
+            UC_SERIE SERIE,
+            UD_OPERADO RESPONSAVEL,
+            UD_CODIGO CODIGO,
+            UD_DATA,
+            UD_SOLUCAO SOLUCAO,
+            UQ_DESC DESCRI,
+            UD_OBS OBS,
+            USR_ID,
+            USR_CODIGO,
+            USR_NOME,
+            TRIM(USR_EMAIL) USR_EMAIL
+        FROM %Table:SUC% SUC
+            INNER JOIN %Table:SUD% SUD ON 
+                UD_FILIAL = UC_FILIAL AND 
+                UD_CODIGO = UC_CODIGO AND 
+                UD_STATUS = '1' AND
+                SUD.%NOTDEL%
+            INNER JOIN %Table:SUQ% SUQ ON 
+                UQ_SOLUCAO = UD_SOLUCAO AND 
+                SUQ.%NOTDEL%
+            INNER JOIN SYS_USR ON 
+                USR_ID = UD_OPERADO AND 
+                SYS_USR.%NOTDEL%
+        WHERE SUC.%NOTDEL%
+            AND UC_FILIAL = %xFilial:SUC%
+            AND UC_STATUS = '2'
+            AND UD_OPERADO = %Exp:SELF:cOperator%
+            ORDER BY UD_CODIGO
+	EndSql	
+
+	While (cAlias)->(!EOF())
+
+        //Alimenta a tabela tempoária
+        DbSelectArea(::cAliasTRB)
+        RecLock(::cAliasTRB,.T.)
+            TRB->UDCODIGO   := (cAlias)->CODIGO
+            TRB->UDDATA     := (cAlias)->UD_DATA
+            TRB->UCNF       := (cAlias)->NOTA
+            TRB->UCSERIE    := (cAlias)->SERIE
+            TRB->UDSOLUCAO  := (cAlias)->SOLUCAO
+            TRB->UQDESC     := (cAlias)->DESCRI
+            TRB->UDOBS      := (cAlias)->OBS
+        TRB->(MsUnlock())
+
+        ::cNameOperator    := (cAlias)->USR_NOME
+        ::cMailResponsible := (cAlias)->USR_EMAIL
+
+        (cAlias)->(DbSkip())
+    End
+
+Return
+
+/*/{Protheus.doc} TSACUpdateCenter::SelectionScreen
+    Método responsável pela construção da tela de seleção
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 21/11/2023
+/*/
+Method SelectionScreen() Class TSACUpdateCenter
+
+    Local aSeek    as Array
+    Local lConfirm as Logical
+
+    #Define DS_MODALFRAME   128
+
+    aSeek    := {}
+    lConfirm := .F.
+
+    Define MsDialog ::oDlgTela Title "SAC's" From 0,0 To 460,1600 Pixel Style DS_MODALFRAME
+
+    ::oBrowse := FWMBrowse():New()
+    ::oBrowse:SetTemporary(.T.)
+    ::oBrowse:SetMenuDef("")
+    ::oBrowse:SetDescription("Relação de SAC's Pendentes")
+    ::oBrowse:SetAlias(Self:cAliasTRB)
+    ::oBrowse:SetColumns(Self:aBrowse)
+    ::oBrowse:SetOwner(Self:oDlgTela)
+    ::oBrowse:SetDoubleClick({|| ::cCodeSAC := (Self:oBrowse:Alias())->UDCODIGO, ::cAction := (Self:oBrowse:Alias())->UDSOLUCAO, Self:oDlgTela:End() })
+    ::oBrowse:AddButton( "Confirmar"  , {|| ::cCodeSAC  := (Self:oBrowse:Alias())->UDCODIGO, ::cAction := (Self:oBrowse:Alias())->UDSOLUCAO, Self:oDlgTela:End() } ,, 2 ) //"Confirmar"
+    ::oBrowse:AddButton( "Cancelar"   , {|| Self:oDlgTela:End() } ,, 2 ) //"Cancelar"
+    ::oBrowse:DisableDetails()
+    ::oBrowse:DisableReport()
+    ::oBrowse:DisableDetails()
+    ::oBrowse:SetUseFilter(.F.)
+    ::oBrowse:SetIgnoreARotina( .T. )
+
+    aadd(aSeek, {RetTitle("UD_CODIGO")    , {{"","C",TamSX3("UD_CODIGO")[1] ,0,AllTrim(RetTitle("UD_CODIGO")),"@!"}}        , 1, .T.})
+
+    ::oBrowse:SetSeek(.T.,aSeek)
+
+    ::oBrowse:Activate()
+
+    Activate MsDialog ::oDlgTela Centered
+
+Return (!Empty(::cCodeSAC))
+
+/*/{Protheus.doc} TSACUpdateCenter::TemporaryStructure
+    Construção da tabela temporária 
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 21/11/2023
+/*/
+Method TemporaryStructure() Class TSACUpdateCenter
+
+	Local nI as Numeric
+
+    nI := 0
+
+	If ( ValType(::oTable) <> "U" )
+		::oTable:Delete()
+		::oTable := Nil
+	Endif
+
+	::oTable := FwTemporaryTable():New(::cAliasTRB)
+
+	aadd(::aCpoInfo, {RetTitle("UD_CODIGO")   , PesqPict("SC7","UD_CODIGO")   , 1})
+	aadd(::aCpoInfo, {RetTitle("UD_DATA")     , PesqPict("SC7","UD_DATA")     , 1})
+	aadd(::aCpoInfo, {RetTitle("UC_NF")       , PesqPict("SC7","UC_NF")       , 1})
+	aadd(::aCpoInfo, {RetTitle("UC_SERIE")    , PesqPict("SC7","UC_SERIE")    , 1})
+	aadd(::aCpoInfo, {RetTitle("UD_SOLUCAO")  , PesqPict("SC7","UD_SOLUCAO")  , 1})
+	aadd(::aCpoInfo, {RetTitle("UQ_DESC")     , PesqPict("SC7","UQ_DESC")     , 1})
+	aadd(::aCpoInfo, {RetTitle("UD_OBS")      , PesqPict("SC7","UD_OBS")      , 1}) 
+
+	aadd(::aCpoData, {"UDCODIGO"  , TamSx3( "UD_CODIGO" )[3]  , TamSx3( "UD_CODIGO" )[1]  , 0})
+	aadd(::aCpoData, {"UDDATA"    , TamSx3( "UD_DATA" )[3]    , TamSx3( "UD_DATA" )[1]    , 0})
+	aadd(::aCpoData, {"UCNF"      , TamSx3( "UC_NF" )[3]      , TamSx3( "UC_NF" )[1]      , 0})
+	aadd(::aCpoData, {"UCSERIE"   , TamSx3( "UC_SERIE" )[3]   , TamSx3( "UC_SERIE" )[1]   , 0})
+	aadd(::aCpoData, {"UDSOLUCAO" , TamSx3( "UD_SOLUCAO" )[3] , TamSx3( "UD_SOLUCAO" )[1] , 0})
+  	aadd(::aCpoData, {"UQDESC"    , TamSx3( "UQ_DESC" )[3]    , TamSx3( "UQ_DESC" )[1]    , 0})
+   	aadd(::aCpoData, {"UDOBS"     , TamSx3( "UD_OBS" )[3]     , TamSx3( "UD_OBS" )[1]     , 0})
+
+	For nI := 1 To Len(::aCpoData)
+
+		aAdd(::aBrowse, FwBrwColumn():New())
+
+		::aBrowse[Len(::aBrowse)]:SetData( &( "{||" + ::aCpoData[nI,1] + "}" ) )
+		::aBrowse[Len(::aBrowse)]:SetTitle(::aCpoInfo[nI,1])
+		::aBrowse[Len(::aBrowse)]:SetPicture(::aCpoInfo[nI,2])
+		::aBrowse[Len(::aBrowse)]:SetSize(::aCpoData[nI,3])
+		::aBrowse[Len(::aBrowse)]:SetDecimal(::aCpoData[nI,4])
+		::aBrowse[Len(::aBrowse)]:SetAlign(::aCpoInfo[nI,3])
+
+	Next nI
+
+	::oTable:SetFields(::aCpoData)
+	::oTable:AddIndex("1", {"UDCODIGO"})
+
+	::oTable:Create()
+
+Return
+
+/*/{Protheus.doc} TSACUpdateCenter::ChangeServiceStatus
+    Atualiza o atendimento, marcando-o como Finalizado
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 21/11/2023
+/*/
+Method ChangeServiceStatus() Class TSACUpdateCenter
+
+	Local cAlias as Character
+    Local lRet   as Logical
+    
+    cAlias := GetNextAlias()
+    lRet   := .F.
+
+	BeginSql Alias cAlias  
+        SELECT 
+            UD_CODIGO CODIGO,
+            R_E_C_N_O_ RECSUD
+        FROM %Table:SUD% SUD
+        WHERE SUD.%NOTDEL%
+            AND UD_FILIAL = %xFilial:SUD%
+            AND UD_STATUS = '1'
+            AND UD_OPERADO = %Exp:SELF:cOperator%
+            AND UD_CODIGO = %Exp:SELF:cCodeSAC%
+            AND UD_SOLUCAO = %Exp:SELF:cAction%
+	EndSql	
+
+	If (cAlias)->(!Eof())
+
+        SUD->(DBGOTO( (cAlias)->RECSUD ))
+
+        RecLock("SUD", .F.)
+            SUD->UD_STATUS := "2"
+            SUD->UD_DTEXEC := dDataBase
+        MSUNLOCK()
+
+        lRet := .T.
+
+    End
+
+Return lRet
+
+/*/{Protheus.doc} TSACUpdateCenter::SendServiceUpdateEmail
+    Responsável pelo envio de e-mail utilizando os parâmetros de Workflow
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 21/11/2023
+/*/
+Method SendServiceUpdateEmail() Class TSACUpdateCenter
+
+	Local cAlias        as Character
+    Local cAliasAux     as Character
+    Local cHtmlMod      as Character
+    Local cPhone        as Character
+    Local cStatus       as Character
+    Local cMidia        as Character
+    Local cContato      as Character
+    Local cObs          as Character
+    Local cComunica     as Character
+    Local cOperatorMail as Character
+
+    cAlias        := GetNextAlias()
+    cAliasAux     := GetNextAlias()
+    cHtmlMod      := ""
+    cPhone        := ""
+    cStatus       := ""
+    cMidia        := ""
+    cContato      := ""
+    cObs          := ""
+    cComunica     := ""
+    cOperatorMail := ""
+
+    If Select( cAlias ) <> 0
+		(cAlias)->( dbCloseArea() )
+	EndIf	
+
+	BeginSql Alias cAlias  
+
+        SELECT 
+            UC_FILIAL,
+            UC_CODIGO,
+            UC_OPERADO SOLICITANTE,
+            UC_NF NOTA,
+            UC_SERIE SERIE,
+            USR_ID,
+            USR_CODIGO,
+            USR_NOME,
+            TRIM(USR_EMAIL) USR_EMAIL,
+            A1_COD,
+            A1_LOJA,
+            A1_NOME,
+            A1_MUNC,
+            A1_END,
+            A1_BAIRRO,
+            A1_DDD,
+            A1_TEL,
+            A1_XTEL2,
+            A1_CEL,
+            UC_DATA,
+            UC_INICIO,
+            UC_OPERACA,
+            UC_STATUS,
+            UC_CODOBS,
+            UC_MIDIA,
+            UC_CODCONT,
+            UC_TIPO
+        FROM %Table:SUC% SUC
+        INNER JOIN %Table:SU7% SU7 ON U7_COD = UC_OPERADO
+                AND SU7.%NOTDEL%
+        INNER JOIN SYS_USR ON USR_CODIGO = U7_NREDUZ
+                AND SYS_USR.%NOTDEL%
+        INNER JOIN %Table:SA1% SA1 ON A1_COD = Substring(UC_CHAVE, 1, 6)
+                AND A1_LOJA = Substring(UC_CHAVE, 7, 2)
+                AND SA1.%NOTDEL%
+        WHERE SUC.%NOTDEL%
+            AND UC_FILIAL = %xFilial:SUC%
+            AND UC_STATUS = '2'
+            AND UC_CODIGO = %Exp:SELF:cCodeSAC%
+	EndSql	
+
+	If (cAlias)->(!Eof())
+
+        cOperatorMail := (cAlias)->USR_EMAIL
+
+        cHtmlMod := "\workflow\htm\wf_sac_baixa.htm" 
+ 
+        oProc := TWFProcess():New( "000001","Atendimento realizado pelo CALL CENTER")
+        oProc:NewTask( "Workflow de baixa de pendência no SAC", cHtmlMod )
+        oProc:cSubject := "Atendimento "+::cCodeSAC+" realizado pelo CALL CENTER"
+
+        oHtml := oProc:oHtml
+
+        If ( valtype(oHtml) != "U" )
+
+            //Controle das informações dos telefones
+            If !Empty((cAlias)->A1_TEL)
+                cPhone += IF(EMPTY((cAlias)->A1_DDD),"","(" + (cAlias)->A1_DDD + ") ") + (cAlias)->A1_TEL + " | "
+            End
+        
+            If !Empty((cAlias)->A1_XTEL2)
+                cPhone += (cAlias)->A1_XTEL2 + " | "
+            End
+        
+            If !Empty((cAlias)->A1_CEL)
+                cPhone += (cAlias)->A1_CEL
+            End
+
+            //Controle das informações dos Status
+            If (cAlias)->UC_STATUS == '1'
+                cStatus := "Planejada"
+            ElseIf (cAlias)->UC_STATUS == '2'  
+                cStatus := "Pendente" 
+            ElseIf (cAlias)->UC_STATUS == '3'  
+                cStatus := "Encerrada" 
+            End    
+
+            //Controle das informações de Midias 
+            If Empty((cAlias)->UC_MIDIA)
+                cMidia := GetAdvFVal("SUH","UH_DESC",xFilial("SUH")+(cAlias)->UC_MIDIA,1)                                                                                              
+            End
+
+            //Comunicação
+            cComunica := GetAdvFVal("SUL","UL_DESC",xFilial("SUL")+(cAlias)->UC_TIPO,1)    
+            
+            //Contato
+            cContato := GetAdvFVal("SU5","U5_CONTAT",xFilial("SU5")+(cAlias)->UC_CODCONT,1)
+
+            //Observação
+            cObs := MSMM((cAlias)->UC_CODOBS,80)                                                                                         
+
+            //Preenchimento do Cabeçalho
+            oHtml:ValByName("EMPRESA"       , FWArrFilAtu(cEmpAnt,cFilAnt)[SM0_NOMECOM])
+            oHtml:ValByName("SAC"           , ::cCodeSAC )
+            oHtml:ValByName("CODIGOCLIENTE" , Alltrim((cAlias)->A1_COD) + Alltrim((cAlias)->A1_LOJA) +" - "+ Alltrim((cAlias)->A1_NOME) )
+            oHtml:ValByName("CODCONTATO"    , cContato )
+            oHtml:ValByName("CODCIDADE"     , (cAlias)->A1_MUNC )
+            oHtml:ValByName("CODEND"        , Alltrim((cAlias)->A1_END) )
+            oHtml:ValByName("CODBAIRRO"     , Alltrim( (cAlias)->A1_BAIRRO) )
+            oHtml:ValByName("CODFONE"       , cPhone )
+            oHtml:ValByName("CODDATA"       , DTOC(STOD((cAlias)->UC_DATA)))
+            oHtml:ValByName("CODHORA"       , (cAlias)->UC_INICIO)
+            oHtml:ValByName("CODOPERADOR"   , Alltrim((cAlias)->SOLICITANTE) +" - " + Alltrim((cAlias)->USR_NOME))
+            oHtml:ValByName("CODCOMUNICA"   , cComunica )
+            oHtml:ValByName("CODSTATUS"     , cStatus )
+            oHtml:ValByName("CODMIDIA"      , cMidia )
+            oHtml:ValByName("OBSERVACAO"    , cObs )
+
+            If Select( cAliasAux ) <> 0
+		        (cAliasAux)->( dbCloseArea() )
+	        EndIf
+
+            //Consulta os itens do atendimento 
+	        BeginSql Alias cAliasAux  
+
+                SELECT 
+                    UD_ITEM, UD_DESCOCO, UD_DATA, UD_OBS, UD_STATUS, UD_DTEXEC, X5_DESCRI, UQ_DESC, USR_NOME
+                FROM 
+                    %Table:SUD% SUD (NOLOCK)
+                INNER JOIN %Table:SX5% SX5 ON 
+                    SX5.%NOTDEL% 
+                    AND X5_CHAVE = UD_ASSUNTO  
+                    AND X5_TABELA = 'T1' 
+                INNER JOIN %Table:SUQ% SUQ ON 
+                    SUQ.%NOTDEL% 
+                    AND UQ_SOLUCAO = UD_SOLUCAO
+                INNER JOIN SYS_USR ON 
+                    USR_ID = UD_OPERADO
+                    AND SYS_USR.%NOTDEL% 
+                WHERE 
+                    SUD.%NOTDEL% 
+                    AND UD_FILIAL = %Exp:(cAlias)->UC_FILIAL%
+                    AND UD_CODIGO = %Exp:(cAlias)->UC_CODIGO% 
+                ORDER BY UD_ITEM
+
+            EndSql	
+
+            While (cAliasAux)->(!EoF())
+
+                AADD((oHtml:ValByName("ap.Item"))       ,   (cAliasAux)->UD_ITEM )
+                AADD((oHtml:ValByName("ap.assunto"))    ,   (cAliasAux)->X5_DESCRI )
+                AADD((oHtml:ValByName("ap.ocorrencia")) ,   (cAliasAux)->UD_DESCOCO)                
+                AADD((oHtml:ValByName("ap.acao"))       ,   (cAliasAux)->UQ_DESC)               
+                AADD((oHtml:ValByName("ap.responsavel")),   (cAliasAux)->USR_NOME )
+                AADD((oHtml:ValByName("ap.data"))       ,   DTOC(STOD((cAliasAux)->UD_DATA)))
+                AADD((oHtml:ValByName("ap.observacao")) ,   (cAliasAux)->UD_OBS )
+                AADD((oHtml:ValByName("ap.status"))     ,   IF((cAliasAux)->UD_STATUS=="1","Pendente","Encerrado"))
+                AADD((oHtml:ValByName("ap.execucao"))   ,   DTOC(STOD((cAliasAux)->UD_DTEXEC)) )                                                                                                       
+
+                (cAliasAux)->(DbSkip())
+            End
+
+            //Para
+            oProc:cTo := ALLTRIM(cOperatorMail) +";"+ ALLTRIM(::cMailResponsible)
+            
+            //Cópia
+            //oProc:cCC := cMailCC
+
+            //Cópia Oculta
+            oProc:cBCC := GetMV("ST_MAILTI")
+            
+        End
+        
+        cID := oProc:Start("\workflow\enviadosWKF")
+
+        If file( "\workflow\enviadosWKF\" + cID)
+
+            conout("Arquivo de workflow copiado com sucesso para a pasta enviadosWKF.")
+
+        endif
+
+        oProc:Finish()
+        
+        WFSendMail()
+        
+        FreeObj(oProc)
+        FreeObj(oHtml)
+
+        If Select( cAlias ) <> 0
+            (cAlias)->( dbCloseArea() )
+        EndIf
+
+        If Select( cAliasAux ) <> 0
+            (cAliasAux)->( dbCloseArea() )
+        EndIf
+
+    End
+
+Return

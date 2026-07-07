@@ -1,0 +1,328 @@
+//Bibliotecas
+#INCLUDE "Totvs.ch"
+#INCLUDE "TOPCONN.CH"
+
+/*/{Protheus.doc} AFAT011
+	Rotina responsável por gerar o Nosso Número e incluir os títulos envolvidos em borderô
+	@type function
+	@version 1.0
+	@author Alfred Andersen
+	@since 12/23/2024
+/*/
+User Function AFAT011()
+
+    Local aArea       := FWGetArea()    as Array
+    Local cAlias      := GetNextAlias() as Character
+
+	Private cBanco    := ""             as Character
+	Private cAgencia  := ""             as Character
+	Private cConta    := ""             as Character
+	Private cSubConta := ""             as Character
+
+	BeginSql Alias cAlias
+                
+        SELECT 
+            SE1.*, SE1.R_E_C_N_O_ RECSE1, ZZ2.*
+        FROM 
+            %Table:SE1% SE1
+        INNER JOIN %Table:SA1% SA1 
+            ON A1_COD       = E1_CLIENTE
+            AND A1_LOJA     = E1_LOJA
+            AND A1_XIMPBOL  = 'S' 
+            AND SA1.%NOTDEL%
+        INNER JOIN %Table:ZZ2% ZZ2
+            ON ZZ2_FILIAL   = %xFilial:ZZ2%
+            AND ZZ2_CODIGO	= A1_XBCOBOL
+            AND ZZ2.%NOTDEL%
+        WHERE SE1.%NOTDEL%
+            AND E1_FILIAL   = %xFilial:SE1%
+            AND E1_NUM      = %Exp:SF2->F2_DOC%
+            AND E1_PREFIXO  = %Exp:SF2->F2_SERIE%
+ 			AND E1_CLIENTE 	= %Exp:SF2->F2_CLIENTE%
+			AND E1_LOJA 	= %Exp:SF2->F2_LOJA%        
+           	AND E1_EMISSAO <> E1_VENCREA
+            ORDER BY E1_PARCELA
+	EndSql
+
+	If (cAlias)->(!EOF())
+
+        While (cAlias)->(!EOF())
+
+            cBanco    := (cAlias)->ZZ2_CODIGO
+			cAgencia  := (cAlias)->ZZ2_AGENCI
+			cConta    := (cAlias)->ZZ2_CONTA
+			cSubConta := (cAlias)->ZZ2_SUBCTA
+
+            SE1->(DbGoTo((cAlias)->RECSE1))
+
+            AFAT011A()
+
+            (cAlias)->(DbSkip())
+        End
+
+    End
+
+    FwRestArea( aArea )
+
+Return
+
+/*/{Protheus.doc} AFAT011A
+	Controle do Nosso Número e geração do Borderô
+	@type function
+	@version 1.0
+	@author Alfred Andersen
+	@since 12/23/2024
+/*/
+Static Function AFAT011A()
+
+	Local cNumBord	:= ""
+	Local cSituacao := "1"
+	Local cSituAnt	:= "0"
+	Local aArea	    := GetArea()
+	Local aAreaSA1	:= GetArea("SA1")
+	Local aAreaSEA	:= GetArea("SEA")
+
+	If Alltrim(SE1->E1_PARCELA) == "01"
+		If !(AFAT011D())
+			Return
+		End
+	End
+
+	Do Case
+		Case cBanco == "001"
+			cNumBord := "B"
+		Case cBanco == "104"
+			cNumBord := "C"
+		Case cBanco == "341"
+			cNumBord := "I"
+		Case cBanco == "356"
+			cNumBord := "R"
+		Case cBanco == "399"
+			cNumBord := "H"
+		Case cBanco == "237"
+			cNumBord := "H"
+		Case cBanco == "033"
+			cNumBord := "S"		
+	EndCase
+
+	SEE->(dbSetOrder(1))
+	SEE->(DbSeek(FWxFilial("SEE") + cBanco + cAgencia + cConta + cSubConta))
+
+	cNumBord += SUBSTR(dtos(ddatabase),3,2)+AFAT011B()+SUBSTR(dtos(ddatabase),7,2) 
+
+    //cNossoNum := Alltrim(NossoNum())
+
+	If cBanco == "341"
+
+		cNossoNum := StrZero(Val(SEE->EE_FAXATU)+1,8)
+
+	elseif cBanco == "001"
+
+		cNossoNum := StrZero(Val(SEE->EE_FAXATU)+1,10)
+
+	elseif cBanco == "033"
+
+		cNossoNum := StrZero(Val(SEE->EE_FAXATU)+1,12)
+
+	elseif cBanco == "237"
+
+		cNossoNum := StrZero(Val(SEE->EE_FAXATU)+1,11)
+
+		Reclock("SEE",.F.)
+			SEE->EE_FAXATU := cNossoNum
+		SEE->(msUnlock())
+
+		cNossoNum := cNossoNum + Alltrim(AFAT011C('02' + cNossoNum))
+
+	elseif cBanco == "104"
+
+		cNossoNum := StrZero(Val(SEE->EE_FAXATU)+1,10)
+
+	End
+
+	If !Empty(cNossoNum) .And. cBanco != "237"
+		
+		Reclock("SEE",.F.)
+			SEE->EE_FAXATU := cNossoNum
+		SEE->(msUnlock())
+
+	End
+
+	RecLock("SE1",.F.)
+        SE1->E1_PORTADO	:= cBanco
+        SE1->E1_AGEDEP	:= cAgencia
+        SE1->E1_CONTA	:= cConta
+        SE1->E1_SITUACA	:= cSituacao
+        SE1->E1_NUMBOR	:= cNumBord
+        SE1->E1_DATABOR	:= dDataBase
+        SE1->E1_NUMBCO  := cNossoNum
+		SE1->E1_PORCJUR := (GetMV("ST_PORCJUR") / 30)
+	SE1->(MsUnlock())
+
+	dbSelectArea("SEA") // TITULOS ENVIADO AO BANCO
+	SEA->(dbSetOrder(1))
+	SEA->(dbGoTop())
+	If dbseek(xfilial('SEA')+cNumBord+SE1->E1_PREFIXO+SE1->E1_NUM+SE1->E1_PARCELA+SE1->E1_TIPO)
+		While SEA->(!EOF()) .AND. SEA->EA_FILIAL == xFilial('SEA');
+					.AND. cNumBord == SEA->EA_NUMBOR;
+					.AND. SE1->E1_PREFIXO == SEA->EA_PREFIXO;
+					.AND. SE1->E1_NUM     == SEA->EA_NUM;
+					.AND. SE1->E1_PARCELA == SEA->EA_PARCELA;
+					.AND. SE1->E1_TIPO    == SEA->EA_TIPO
+		
+			RecLock("SEA",.F.)
+			SEA->(dbDelete())
+			SEA->(MsUnLock())
+		
+			dbSelectArea("SEA")
+			SEA->(dbSkip())
+		EndDo	
+	EndIf
+
+	RecLock("SEA",.T.)
+	SEA->EA_FILIAL  := xFilial("SEA")
+	SEA->EA_PREFIXO := SE1->E1_PREFIXO
+	SEA->EA_NUM     := SE1->E1_NUM
+	SEA->EA_PARCELA := SE1->E1_PARCELA
+	SEA->EA_TIPO    := SE1->E1_TIPO
+	SEA->EA_PORTADO := cBanco
+	SEA->EA_AGEDEP  := cAgencia
+	SEA->EA_NUMCON  := cConta
+	SEA->EA_NUMBOR  := cNumBord
+	SEA->EA_DATABOR := dDataBase
+	SEA->EA_CART    := 'R'
+	SEA->EA_SITUACA := cSituacao
+	SEA->EA_SITUANT := cSituAnt
+
+	//Utilização da comunicação babcária via API do Protheus
+	If Alltrim(cBanco) == "001" .And. FWxFilial("SEA") == "020201"
+		SEA->EA_FILORIG := FWxFilial("SEA")
+		SEA->EA_PORTANT := cBanco
+		SEA->EA_AGEANT  := cAgencia
+		SEA->EA_CONTANT := cConta
+		//SEA->EA_BORAPI  := "S"
+		SEA->EA_SUBCTA  := cSubConta
+		SEA->EA_ESPECIE := "2"
+	End
+
+	SEA->(MsUnLock())
+
+	RestArea(aAreaSEA)
+	RestArea(aAreaSA1)
+	RestArea(aArea)
+
+Return(cNumBord)
+
+
+/*/{Protheus.doc} AFAT011B
+	Funcao que Retorna o Mes em LETRA para o BORDERO
+	@type function
+	@version 1.0
+	@author Alfred Andersen
+	@since 12/23/2024
+/*/
+Static Function AFAT011B()
+	Local cRet	:= ""
+	Local dMes	:= dDataBase
+	
+	if     month(dMes)==01 ; cRet := "A"
+	elseif month(dMes)==02 ; cRet := "B"
+	elseif month(dMes)==03 ; cRet := "C"           
+	elseif month(dMes)==04 ; cRet := "D"
+	elseif month(dMes)==05 ; cRet := "E"
+	elseif month(dMes)==06 ; cRet := "F"
+	elseif month(dMes)==07 ; cRet := "G"
+	elseif month(dMes)==08 ; cRet := "H"
+	elseif month(dMes)==09 ; cRet := "I"
+	elseif month(dMes)==10 ; cRet := "J"
+	elseif month(dMes)==11 ; cRet := "L"
+	elseif month(dMes)==12 ; cRet := "M"
+	endif
+
+Return cRet
+
+/*/{Protheus.doc} AFAT011C
+	Dígito verificador do banco Bradesco
+	@type function
+	@version 1.0
+	@author Alfred Andersen
+	@since 12/23/2024
+/*/
+Static Function AFAT011C(cData)
+
+	Local nL, nD, nP := 0
+	nL := Len(cData)
+	nD := 0
+	nP := 1
+
+	While nL > 0
+		nP := nP + 1
+		nD := nD + (Val(SubStr(cData, nL, 1)) * nP)
+
+		If nP == 7
+			nP := 1
+		EndIf
+
+		nL := nL - 1
+	End
+
+	nD := 11 - (Mod(nD,11))
+
+	If nD == 10
+		cDv := "P"
+	ElseIf nD > 10
+		cDv := "0"
+	Else
+		cDv := Str(nD)
+	EndIf
+
+Return cDv
+
+/*/{Protheus.doc} AFAT011D
+	Faturamentos com a primeira parcela paga como Deposito Bancário não devem gerar boleto 
+	@type function
+	@version 1.0
+	@author Alfred Andersen
+	@since 3/17/2025
+/*/
+Static Function AFAT011D()
+
+	Local lRet := .T. as Logical 
+	Local cAliasSUA := GetNextAlias() as Character
+
+	BeginSql Alias cAliasSUA
+                
+        SELECT 
+            TOP 1 L4_FORMA
+        FROM 
+            %Table:SUA% SUA
+        INNER JOIN %Table:SL4% SL4 
+            ON L4_FILIAL 	= UA_FILIAL
+            AND L4_NUM 		= UA_NUM
+            AND SL4.%NOTDEL%
+        WHERE SUA.%NOTDEL%
+            AND UA_FILIAL   = %xFilial:SE1%
+            AND UA_DOC      = %Exp:SE1->E1_NUM%
+            AND UA_SERIE  	= %Exp:SE1->E1_PREFIXO%
+ 			AND UA_NUMSC5 	= %Exp:SE1->E1_PEDIDO%
+			AND L4_FORMA 	IN ('DB','CR','CC','DC','CQ','VA','CD')
+	EndSql
+
+	If (cAliasSUA)->(!EOF())
+		/*
+        While (cAliasSUA)->(!EOF())
+
+            If Alltrim((cAliasSUA)->L4_FORMA) == "DB"
+				lRet := .F.
+			End
+
+            (cAliasSUA)->(DbSkip())
+        End
+		*/
+
+		lRet := .F.
+    End
+
+	(cAliasSUA)->(DbCloseArea())
+
+Return lRet

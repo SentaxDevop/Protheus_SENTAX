@@ -1,0 +1,25 @@
+#Include "TOTVS.ch"
+
+/*/{Protheus.doc} MTA242I
+    Chamado após a gravacao dos movimentos de desmontagem
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 8/14/2025
+/*/
+User Function MTA242IN()
+
+    Local cNewSeq   := Alltrim(cDocumento)        as Character
+    Local lCyberlog := GetNewPar("ST_INTWMS",.T.) as Logical
+
+    If lCyberlog .And. cFilAnt == '020201'
+
+        If cNewSeq == GETMV("SF_MTA242I")
+
+            PutMV("SF_MTA242I",Soma1(cNewSeq))
+
+        End
+
+    End
+
+Return

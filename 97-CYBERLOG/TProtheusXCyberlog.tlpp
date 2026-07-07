@@ -1,0 +1,617 @@
+#INCLUDE "PROTHEUS.CH"
+#INCLUDE "TOPCONN.CH"
+#INCLUDE "FWMVCDEF.CH"
+#Include "TOTVS.ch"
+#Include "RESTFul.ch"
+
+/*/{Protheus.doc} TIntegracaoProtheusxWMSCyberlog
+Classe responsável pela integração entre Protheus x WMS Cyberlog
+@type class
+@version 1.0
+@author Alfred Andersen
+@since 27/01/2023
+/*/
+Class TIntegracaoProtheusxWMSCyberlog
+
+	Public Data cNumeroPedido as character
+    Public Data nTipoOperacao as numeric
+	Public Data nRECSC5       as numeric
+	Public Data cFilSD3       as character
+	Public Data cDocumento    as character
+	Public Data cNumSeq       as character
+
+	Public Method New() Constructor //Construtor
+	Public Method IntegraPedidodeVenda() //Integração do Pedido de Venda do Vtrina com o Cyberlog		
+	Public Method EnviaPVparaWMS() //Método central de envio do Pedido de Venda para  o Cyberlog
+	Public Method EnviaPreNFparaWMS()
+	Public Method RemoveRegistrosDuplicadosSC9()
+	Public Method SendProductionOrder() //Envia as ordens de produção encerradas
+	Public Method Packinglist()
+	Public Method MovimentoInterno() //Processa envio do Movimento Interno gerado pela rotina de Desmontagem de Produtos
+
+EndClass
+
+/*/{Protheus.doc} TIntegracaoProtheusxWMSCyberlog::New
+Método principal de integração entre o Protheus x WMS Cyberlog
+@type class
+@version 1.0
+@author Alfred Andersen
+@since 27/01/2023
+/*/
+Method New() Class TIntegracaoProtheusxWMSCyberlog
+
+	::cNumeroPedido := ""
+    ::nTipoOperacao := 0
+	::nRECSC5       := 0
+	::cFilSD3       := ""
+	::cDocumento    := ""
+	::cNumSeq       := ""
+
+Return(Self)
+
+/*/{Protheus.doc} TIntegracaoProtheusxWMSCyberlog::TIntegracaoProtheusxWMSCyberlog
+Método responsável pela integração dos pedidos de venda de origem do Vtrina com o Cyberlog
+@type class
+@version 1.0
+@author Alfred Andersen
+@since 27/01/2023
+/*/
+Method IntegraPedidodeVenda() Class TIntegracaoProtheusxWMSCyberlog
+
+    Local lRet 		:= .F.
+    Local aRea 		:= GetArea()
+	Local cQuery 	:= GetNextAlias()
+	//Local cWhere 	:= "%C9_PEDIDO =" + ::cNumeroPedido + "%"
+
+	//Inclusão do Pedido de Venda
+	If ::nTipoOperacao == 3
+
+		BeginSql Alias cQuery
+
+			/*
+			SELECT 	C9_PEDIDO, C9_ITEM, C9_CLIENTE, C9_LOJA, C9_PRODUTO, C9_QTDLIB, C9_XSTAWMS, C9_XDTIWMS, C9_XHRIWMS,
+					ISNULL(CONVERT(VARCHAR(2047),CONVERT(VARBINARY(2047), C9_XMSGWMS)),'') MSGINT, SC9.R_E_C_N_O_ RECSC9, C5_TIPO
+			FROM %Table:SC9% SC9 (NOLOCK)
+				INNER JOIN %Table:SC5% SC5 (NOLOCK) ON C5_FILIAL = C9_FILIAL AND C5_NUM = C9_PEDIDO AND SC5.%notdel%
+			WHERE C9_FILIAL = %xFilial:SC9%
+				AND C9_NFISCAL 	= ''
+				AND C9_BLEST 	= '' 
+				//AND C9_BLCRED 	= ''
+				AND C9_XSTAWMS	= ''
+				AND SC9.%notdel%
+				AND %Exp:cWhere%
+				ORDER BY C9_PEDIDO, C9_ITEM 
+			*/
+			SELECT C5_NUM,
+				C5_CLIENTE,
+				C5_LOJACLI,
+				C5_XSTAWMS,
+				C5_XDTIWMS,
+				C5_XHRIWMS,
+				COALESCE(CONVERT(VARCHAR(2047), CONVERT(VARBINARY(2047), SC5.C5_XMSGWMS)), ' ') MSGINT,
+				C5_TIPO,
+				SC5.R_E_C_N_O_ RECSC5
+			FROM %Table:SC5% SC5 (NOLOCK)
+			INNER JOIN %Table:SC9% (NOLOCK) SC9 ON C9_FILIAL = C5_FILIAL
+				AND C9_PEDIDO = C5_NUM
+				AND SC9.%NOTDEL%
+			WHERE C5_FILIAL = "020201"
+				AND C5_NUM = %Exp:self:cNumeroPedido%
+				AND C9_NFISCAL = ' '
+				AND C9_BLEST = ' '
+				AND C9_BLCRED = ' '
+				AND C5_XSTAWMS = ' '
+				AND SC5.%NOTDEL%
+			GROUP BY C5_NUM,
+					C5_CLIENTE,
+					C5_LOJACLI,
+					C5_XSTAWMS,
+					C5_XDTIWMS,
+					C5_XHRIWMS,
+					C5_XMSGWMS,
+					C5_TIPO,
+					SC5.R_E_C_N_O_
+			ORDER BY C5_NUM
+
+		EndSql
+
+		if !(cQuery)->(EoF())
+
+			While !(cQuery)->(EoF())
+
+				::nRECSC5 := (cQuery)->RECSC5
+
+				Conout("Enviando para o WMS o Pedido de Venda nº " + ::cNumeroPedido)
+
+				::EnviaPVparaWMS()
+				
+				(cQuery)->(DbSkip())
+
+			EndDo
+
+			Conout("Pedido de Venda nº " + ::cNumeroPedido + " não atende as regras de envio automático.")
+
+		End
+		
+	End
+
+    RestArea( aRea )
+
+Return lRet
+
+/*/{Protheus.doc} TIntegracaoProtheusxWMSCyberlog::EnviaPVparaWMS
+Método central para a chamada da API Cyberlog
+@type class
+@version 1.0
+@author Alfred Andersen
+@since 27/01/2023
+/*/
+Method EnviaPVparaWMS() Class TIntegracaoProtheusxWMSCyberlog
+
+	Local aRea 		:= GetArea()
+	Local cMsgPnl 	:= ""
+	Local aRet		:= Array(3)
+
+	Private cOpera	:= "E"
+
+	If cFilAnt <> "020201"
+		Return 
+	End
+
+	DbSelectArea("SC5")
+	SC5->(DbGoto(::nRECSC5))
+
+	SC6->(DbSetOrder(1))
+	SC6->(DbSeek(xFilial("SC6") + SC5->C5_NUM))
+
+	cMsgPnl:= SC5->C5_XMSGWMS + CRLF
+	cMsgPnl+= "-----------------------------------------------------------------------------------------" + CRLF
+	cMsgPnl+= "Data: "+dtoc(dDataBase) + " Hora: " + Time() + " Integração Automática "+ CRLF
+
+	lEDIOk	:= .T.
+	lIntegra:= .T. 
+
+	aRet:= U_xWMSPED( GetMv('FZ_WSWMS5'), 'SC6', 1, 'C6_FILIAL+C6_NUM+C6_ITEM', FWxFilial('SC6') + SC6->C6_NUM + SC6->C6_ITEM ) 
+
+	RecLock("SC5",.F.)
+
+		If cOpera !="C"								
+			If Empty(SC5->C5_XSTAWMS) .or. SC5->C5_XSTAWMS=="F"
+				//' '=Nao Enviado;E=Enviado;F=Falha Envio;O=Retorno OK;X=Retorno Incorreto;C=Cancelado
+				SC5->C5_XSTAWMS:= iIf(aRet[1],"E","F")
+			Endif
+		Else
+			If aRet[1]	
+				//' '=Nao Enviado;E=Enviado;F=Falha Envio;O=Retorno OK;X=Retorno Incorreto;C=Cancelado
+				SC5->C5_XSTAWMS:= "C" 
+			Endif
+		Endif
+		
+		SC5->C5_XDTIWMS:= dDataBase
+		SC5->C5_XHRIWMS:= Time()
+		SC5->C5_XMSGWMS:= cMsgPnl+aRet[3]		
+
+		Conout("Integração finalizada para o Pedido de Venda: "+SC5->C5_NUM)
+
+	SC5->(MsUnlock())
+
+	RestArea( aRea )
+
+Return
+
+/*/{Protheus.doc} TIntegracaoProtheusxWMSCyberlog::EnviaPreNFparaWMS
+Método para envio da Pré Nota de Entrada para o WMS
+@type class
+@version 1.0
+@author Alfred Andersen
+@since 12/05/2023
+/*/
+Method EnviaPreNFparaWMS(	cNumero 		as Character,;
+							cSerie 			as Character,;
+							cCodigo 		as Character,;
+							cLoja 			as Character,;
+							cTipoDocumento 	as Character) Class TIntegracaoProtheusxWMSCyberlog
+
+	Local aArea    := GetArea()
+	Local cAlias   := GetNextAlias()
+	Local aRet     := Array(3)
+	Local lRet     := .F.
+	Local lFirst   := .T.
+	
+	Private cOpera := "E" //Variavel do Tipo Private que sera usada no Layout do Envio do Pedido na Tabla ZA3, para definir se é uma inclusao ou exclusao
+
+	BeginSql Alias cAlias
+		SELECT R_E_C_N_O_ RECSD1
+			FROM %Table:SD1% SD1 (NOLOCK)
+		WHERE D1_FILIAL 	= "020201"
+			AND D1_DOC 		= %Exp:cNumero%
+			AND D1_SERIE 	= %Exp:cSerie%
+			AND D1_FORNECE 	= %Exp:cCodigo%
+			AND D1_LOJA 	= %Exp:cLoja%
+			AND D1_TIPO 	= %Exp:cTipoDocumento%
+			AND D1_XSTAWMS 	= ''
+			AND SD1.%notdel%
+			Order by D1_ITEM
+	EndSql	
+
+	While (cAlias)->(!EOF())
+		
+		If lFirst
+
+			SD1->(DbGoto((cAlias)->RECSD1))
+
+			//Chama a rotina de integração do WMS
+			aRet:= U_fConJson( GetMv('FZ_WSWMS6'), 'SD1', 1, 'D1_FILIAL+D1_DOC+D1_SERIE+D1_FORNECE+D1_LOJA+D1_COD+D1_ITEM', SD1->(D1_FILIAL+D1_DOC+D1_SERIE+D1_FORNECE+D1_LOJA+D1_COD+D1_ITEM) ) 
+
+			//Bloqueio os envios, pois a rotina já considera os demais itens na montagem do JSON
+			lFirst := .F.
+
+		End
+
+		//Posiciona no registro novamente, pois estava se perdendo depois do retorno da função acima
+		SD1->(DbGoto((cAlias)->RECSD1))
+
+		//Atualiza o Item da nota conforme retorno do WMS
+		RecLock("SD1",.F.)		
+
+			If aRet[1]
+				SD1->D1_XSTAWMS := "E" //Enviado
+				lRet := .T.
+			else
+				SD1->D1_XSTAWMS := "F" //Falha
+				Conout("Erro no envio da Pré Nota " + cNumero + " para o Cyberlog. Erro: "+aRet[2])
+				lRet := .F.
+			End
+		
+		SD1->(MsUnlock())
+
+		(cAlias)->(DbSkip())
+	End
+
+	RestArea( aArea )
+
+Return lRet	   
+
+/*/{Protheus.doc} TIntegracaoProtheusxWMSCyberlog::RemoveRegistrosDuplicadosSC9
+Realiza a deleção dos registros duplicados na SC9 antes de processar o envio dos pedidos para o WMS
+@type method
+@version 1.0
+@author Alfred Andersen
+@since 04/07/2023
+@requester Kleber Moro
+@consultancy Harpia
+@site www.harpiaconsultoria.com
+/*/
+Method RemoveRegistrosDuplicadosSC9() Class TIntegracaoProtheusxWMSCyberlog
+
+	Local cAlias    as Character
+	Local cAliasSeq as Character
+
+	cAlias    := GetNextAlias()
+	cAliasSeq := ""
+
+	BeginSql Alias cAlias
+		SELECT 
+			C9_FILIAL, C9_PEDIDO, C9_ITEM, C9_CLIENTE, C9_LOJA, C9_PRODUTO, C9_BLEST, C9_BLCRED, COUNT(*)
+		FROM 
+			%Table:SC9% SC9 (NOLOCK)
+		WHERE SC9.%notdel%
+			AND C9_FILIAL = %Exp:xFilial("SC9")%
+			AND C9_NFISCAL 	= ''
+			AND C9_BLEST 	= '' 
+			AND C9_DATALIB >= '20230701'
+		GROUP BY 
+			C9_FILIAL, C9_PEDIDO, C9_ITEM, C9_CLIENTE, C9_LOJA, C9_PRODUTO, C9_BLEST, C9_BLCRED
+		HAVING COUNT(*) > 1
+	EndSql	
+
+	While (cAlias)->(!EOF())
+
+		cAliasSeq := GetNextAlias()
+
+		BeginSql Alias cAliasSeq
+			SELECT 
+				MAX(C9_SEQUEN) SEQ
+			FROM 
+				%Table:SC9% SC9 (NOLOCK)
+			WHERE SC9.%notdel%
+				AND C9_FILIAL 	= %Exp:(cAlias)->C9_FILIAL%
+				AND C9_PEDIDO 	= %Exp:(cAlias)->C9_PEDIDO%
+				AND C9_ITEM 	= %Exp:(cAlias)->C9_ITEM%
+				AND C9_CLIENTE 	= %Exp:(cAlias)->C9_CLIENTE%
+				AND C9_LOJA 	= %Exp:(cAlias)->C9_LOJA%
+				AND C9_PRODUTO 	= %Exp:(cAlias)->C9_PRODUTO%
+				AND C9_XSTAWMS	<> 'O'
+		EndSql	
+
+		SC9->(DbSetOrder(1))
+		If SC9->(DbSeek(xFilial("SC9")+(cAlias)->C9_PEDIDO+(cAlias)->C9_ITEM+(cAliasSeq)->SEQ+(cAlias)->C9_PRODUTO))
+
+			RecLock("SC9",.F.)
+				SC9->(DbDelete())
+			MsUnlock()
+
+			Conout("Deletando registro duplicado na SC9 - Filial: " + (cAlias)->C9_FILIAL + "| Pedido: " + (cAlias)->C9_PEDIDO + " | Item: " + (cAlias)->C9_ITEM + " Seq: "+(cAliasSeq)->SEQ)
+
+			(cAliasSeq)->(DbCloseArea())
+
+		End
+
+		(cAlias)->(dbSkip())        
+	Enddo  
+
+	If Select(cAlias) > 0
+		DbSelectArea(cAlias)
+		DbCloseArea()
+	EndIf
+
+Return
+
+/*/{Protheus.doc} TIntegracaoProtheusxWMSCyberlog::SendProductionOrder
+	Realiza o envio das OP's para o Cyberlog
+	@type method
+	@version 1.0
+	@author Alfred Andersen
+	@since 5/9/2024
+/*/
+Method SendProductionOrder() Class TIntegracaoProtheusxWMSCyberlog
+
+    Local aRet as Array
+
+	If cFilAnt <> "020201"	
+		Return 
+	End
+
+	aRet:= U_fConJson( GetMv('FZ_WSWMSE'), 'SD3', 1, 'D3_FILIAL+D3_OP+D3_COD+D3_LOCAL', SD3->(D3_FILIAL+D3_OP+D3_COD+D3_LOCAL) ) 
+	
+	If aRet[1]
+		FWAlertSuccess("Ordem de Produção nº " + Alltrim(SD3->D3_OP) + " enviado com sucesso para o WMS." + CRLF + "Retorno:(" + aRet[2] + ")")
+	else
+		FWAlertError("Falha no envio da Ordem de Produção nº " + Alltrim(SD3->D3_OP) + " para o WMS. Retorno:(" + aRet[2] + ")")
+	End
+
+Return
+
+/*/{Protheus.doc} TIntegracaoProtheusxWMSCyberlog::Packinglist
+	Grava o romaneio realizado no Cyberlog para visualização no Call Center
+	@type method
+	@version 1.0
+	@author Alfred Andersen
+	@since 10/6/2024
+/*/
+Method Packinglist(aZ03 as Array, aZ04 as Array) Class TIntegracaoProtheusxWMSCyberlog
+
+	Local lRet  := .F.    as Logical
+	Local cTime := TIME() as Character
+
+	Default aZ03 := {}
+	Default aZ04 := {}
+
+	cTime := StrTran(cTime,":","")
+
+	If Len(aZ03) > 0
+		Reclock("Z03",.T.)
+				Z03->Z03_FILIAL := FWxFilial("Z03")
+				Z03->Z03_COD    := aZ03[1][1]
+				Z03->Z03_TRANSP := aZ03[1][2]
+				//Z03->Z03_MOTORI := aZ03[1][6]
+				Z03->Z03_DATA   := dDataBase
+				Z03->Z03_HORA   := cTime
+				Z03->Z03_TOTALV := aZ03[1][3]
+				Z03->Z03_VALOR  := aZ03[1][4]
+				Z03->Z03_IDUSER := '000000'
+				Z03->Z03_ACEFIN := "1"
+				Z03->Z03_IDWMS  := aZ03[1][5]
+		Z03->(MSUnlock())
+	End
+
+	If Len(aZ04) > 0
+		Reclock("Z04",.T.)
+				Z04->Z04_FILIAL := FWxFilial("Z04")
+				Z04->Z04_COD    := aZ04[1][1]
+				Z04->Z04_SEQ    := aZ04[1][2]
+				Z04->Z04_CHVNFE := aZ04[1][3]
+				Z04->Z04_NFISCA := aZ04[1][4]
+				Z04->Z04_SERIE  := aZ04[1][5]
+				Z04->Z04_CLIENT := aZ04[1][6]
+				Z04->Z04_LOJA   := aZ04[1][7]
+				Z04->Z04_TOTALV := aZ04[1][8]
+				Z04->Z04_VALOR  := aZ04[1][9]
+				Z04->Z04_DATA   := aZ04[1][10]
+				Z04->Z04_HORA   := cTime
+				Z04->Z04_CARORI := aZ04[1][11]
+		Z04->(MSUnlock())
+	End
+
+	lRet := .T.
+
+Return lRet 
+
+/*/{Protheus.doc} TIntegracaoProtheusxWMSCyberlog::MovimentoInterno
+	Criado para envio dos produtos gerados pela rotina de Desmontagem
+	@type method
+	@version 1.0
+	@author Alfred Andersen
+	@since 10/27/2025
+/*/
+Method MovimentoInterno() Class TIntegracaoProtheusxWMSCyberlog
+
+    Local aRet      := {}             as Array
+	Local cAliasAux := GetNextAlias() as Character
+	Local cChave    := ""             as Character
+
+	BeginSql Alias cAliasAux
+		SELECT
+            SD3.*
+		FROM 
+            %Table:SD3% SD3 (NOLOCK)
+		WHERE SD3.%NOTDEL%
+            AND D3_FILIAL 	= %Exp:SELF:cFilSD3%
+			AND D3_DOC 		= %Exp:SELF:cDocumento%
+			AND D3_NUMSEQ 	= %Exp:SELF:cNumSeq%
+			AND D3_ESTORNO 	= ''
+		ORDER BY 
+			R_E_C_N_O_
+	EndSql	
+
+    While (cAliasAux)->(!EOF())
+
+		SD3->(DbGoTO((cAliasAux)->R_E_C_N_O_))
+
+		If (cAliasAux)->D3_CF == 'RE7' //Devemos enviar para a API de Separação do Cyberlog
+
+			cChave := (cAliasAux)->D3_FILIAL+(cAliasAux)->D3_COD+(cAliasAux)->D3_LOCAL+(cAliasAux)->D3_NUMSEQ+(cAliasAux)->D3_CF
+
+			aRet:= U_fConJson( GetMv('FZ_WSWMSF'), 'SD3', 3, 'D3_FILIAL+D3_COD+D3_LOCAL+D3_NUMSEQ+D3_CF', cChave ) 
+                
+			If aRet[1]
+
+				SD3->(DbGoTO((cAliasAux)->R_E_C_N_O_))
+
+				Reclock("SD3",.F.)
+					SD3->D3_XINTEG := "S"
+				SD3->(MSUnlock())
+
+				ConOut("Desmontagem nº " + Alltrim((cAliasAux)->D3_DOC) + "|" + (cAliasAux)->D3_COD + " enviado com sucesso para o WMS." + CRLF + "Retorno:(" + aRet[2] + ")")
+			Else
+				ConOut("Falha no envio da Desmontagem nº " + Alltrim((cAliasAux)->D3_DOC) + "|" + (cAliasAux)->D3_COD + " para o WMS. Retorno:(" + aRet[2] + ")")
+			End
+
+		ElseIf (cAliasAux)->D3_CF == 'DE7' //Devemos enviar para a API de Recebimento do Cyberlog
+			
+			cChave := (cAliasAux)->D3_FILIAL+(cAliasAux)->D3_COD+(cAliasAux)->D3_LOCAL+(cAliasAux)->D3_NUMSEQ+(cAliasAux)->D3_CF
+
+			aRet:= U_fConJson( GetMv('FZ_WSWMSG'), 'SD3', 3, 'D3_FILIAL+D3_COD+D3_LOCAL+D3_NUMSEQ+D3_CF', cChave ) 
+                
+			If aRet[1]
+
+				SD3->(DbGoTO((cAliasAux)->R_E_C_N_O_))
+
+				Reclock("SD3",.F.)
+					SD3->D3_XINTEG := "S"
+				SD3->(MSUnlock())
+
+				ConOut("Desmontagem nº " + Alltrim((cAliasAux)->D3_DOC) + "|" + (cAliasAux)->D3_COD + " enviado com sucesso para o WMS." + CRLF + "Retorno:(" + aRet[2] + ")")
+			Else
+				ConOut("Falha no envio da Desmontagem nº " + Alltrim((cAliasAux)->D3_DOC) + "|" + (cAliasAux)->D3_COD + " para o WMS. Retorno:(" + aRet[2] + ")")
+			End
+
+		End
+
+		(cAliasAux)->(dbSkip())  
+
+	End
+
+
+Return
+
+/*/{Protheus.doc} PVtoWMS
+Schudule responsável pelo envio automático dos pedidos de venda para o WMS Cyberlog
+@type function
+@version 1.0
+@author Alfred Andersen
+@since 27/01/2023
+/*/
+User Function PVtoWMS(aPars)
+
+	Local cAlias	:= GetNextAlias()
+	Local oObjeto 	:= TIntegracaoProtheusxWMSCyberlog():New()
+
+	DEFAULT aPars   := {"01","020201"}
+
+	RpcClearenv()
+
+	RpcSetType( 3 )
+	RpcSetEnv( aPars[1], aPars[2] )
+
+	Conout("INICIANDO ENVIO DE PEDIDOS PARA O WMS. Rotina: PVtoWMS - Empresa|Filial [ " + aPars[1] + "|" + aPars[2] + " ] - Data|Hora ["+DTOC(DATE())+" - "+TIME()+"]")
+
+	/*
+		//Cleaner SC9
+		oObjeto:RemoveRegistrosDuplicadosSC9()
+
+		BeginSql Alias cAlias
+			SELECT 	C9_FILIAL,C5_EMISSAO, C9_PEDIDO, C9_ITEM, C9_CLIENTE, C9_LOJA, C9_PRODUTO, C9_XSTAWMS, C9_NFISCAL, C9_BLEST, C9_BLCRED,
+					SC9.R_E_C_N_O_ RECSC9, C5_TIPO, C5_VEND1
+			FROM %Table:SC9% SC9 (NOLOCK)
+				INNER JOIN %Table:SC5% SC5 (NOLOCK) ON C5_FILIAL = C9_FILIAL AND C5_NUM = C9_PEDIDO AND SC5.%notdel%
+				INNER JOIN %Table:SC6% SC6 (NOLOCK) ON C6_FILIAL = C9_FILIAL AND C6_NUM = C9_PEDIDO AND C6_ITEM = C9_ITEM AND SC6.%notdel%
+				INNER JOIN %Table:SF4% SF4 (NOLOCK) ON F4_FILIAL = SUBSTRING(C6_FILIAL,1,4) AND F4_CODIGO = C6_TES AND F4_ESTOQUE = 'S' AND SF4.%notdel%
+			WHERE C9_FILIAL = %Exp:aPars[2]%
+				And C5_EMISSAO >= '20230101'
+				AND C9_NFISCAL 	= ''
+				AND C9_BLEST 	= '' 
+				AND ((C5_VEND1 <> '510' AND C9_BLCRED = '') OR (C5_VEND1 = '510'))
+				AND C9_XSTAWMS	= ''
+				AND SC9.%notdel%
+				ORDER BY C9_FILIAL, C5_EMISSAO, C9_PEDIDO, C9_ITEM 
+		EndSql	
+	*/
+	BeginSql Alias cAlias
+		SELECT C5_FILIAL, C5_NUM,
+			C5_CLIENTE,
+			C5_LOJACLI,
+			C5_XSTAWMS,
+			C5_XDTIWMS,
+			C5_XHRIWMS,
+			ISNULL(CONVERT(VARCHAR(2047), CONVERT(VARBINARY(2047), SC5.C5_XMSGWMS)), '') MSGINT,
+			C5_TIPO,
+			SC5.R_E_C_N_O_ RECSC5
+		FROM %Table:SC5% SC5 (NOLOCK)
+		INNER JOIN %Table:SC6% SC6 (NOLOCK) ON C6_FILIAL = C5_FILIAL
+			AND C6_NUM = C5_NUM
+			AND SC6.%NOTDEL%
+		INNER JOIN %Table:SC9% SC9 (NOLOCK) ON C9_FILIAL = C6_FILIAL
+			AND C6_NUM = C9_PEDIDO
+			AND C6_PRODUTO = C9_PRODUTO
+			AND C9_ITEM = C6_ITEM
+			AND SC9.%NOTDEL%
+		WHERE C5_FILIAL = %Exp:aPars[2]%
+			And C5_EMISSAO >= '20231001'
+			AND C9_NFISCAL 	= ''
+			AND C9_BLEST 	= ''
+			AND C9_BLCRED 	= ''
+			AND C5_XSTAWMS = ' '
+			AND ((C5_VEND1 <> '510' AND C9_BLCRED = '') OR (C5_VEND1 = '510'))
+			AND SC5.%NOTDEL%
+		GROUP BY C5_FILIAL, C5_NUM,
+				C5_CLIENTE,
+				C5_LOJACLI,
+				C5_XSTAWMS,
+				C5_XDTIWMS,
+				C5_XHRIWMS,
+				C5_XMSGWMS,
+				C5_TIPO,
+				SC5.R_E_C_N_O_
+		ORDER BY C5_NUM
+	EndSql	
+
+	While (cAlias)->(!EOF())
+
+		//Verifica de todos os itens do pedido estão liberados 
+		If !(U_ValPed((cAlias)->C5_FILIAL, (cAlias)->C5_NUM))
+			
+			Conout("Pedido de Venda não possui todos os itens aptos para envio ao WMS | Pedido: " + (cAlias)->C5_NUM)
+
+			(cAlias)->( DbSkip() )
+			LOOP
+		End
+
+		Conout("Enviando para o Cyberlog - | Pedido: " + (cAlias)->C5_NUM)
+
+		oObjeto:nRECSC5 := (cAlias)->RECSC5
+		oObjeto:EnviaPVparaWMS()
+
+		(cAlias)->(dbSkip())        
+	Enddo  		
+
+	FREEOBJ( oObjeto )
+
+	Conout("FIM ENVIO DE PEDIDOS PARA O WMS - Data|Hora ["+DTOC(DATE())+" - "+TIME()+"]")
+
+	// Fecha todas as áreas de trabalho
+  	DBCloseAll()
+
+	RpcClearEnv()
+
+Return

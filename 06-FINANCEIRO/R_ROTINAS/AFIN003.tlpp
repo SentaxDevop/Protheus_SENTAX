@@ -1,0 +1,61 @@
+#include "TOTVS.ch"
+
+/*/{Protheus.doc} AFIN003
+    Função responsável por atribuir a condição de borderô elegível para a API BB
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 4/4/2024
+	@requester Kleber Moro
+	@consultancy Harpia
+	@site www.harpiaconsultoria.com
+/*/
+User Function AFIN003(aPars)
+
+	Local cAliasSEA as Character
+    Local nDias     as Numeric
+    Local cData     as Character
+
+	DEFAULT aPars := {1, "01", "020201"}
+
+	RpcClearenv()
+
+	RpcSetType( 3 )
+	RpcSetEnv( aPars[2], aPars[3] )
+
+    cAliasSEA := GetNextAlias()
+    nDias     := GetNewPar("ST_FIN003", 1)
+    cData     := DTOS(dDataBase - nDias)
+
+	BeginSql Alias cAliasSEA
+                
+        SELECT SEA.R_E_C_N_O_ RECSEA
+        FROM 
+            %Table:SE1% SE1
+        INNER JOIN %Table:SEA%  SEA ON EA_FILIAL = E1_FILIAL AND EA_PREFIXO = E1_PREFIXO
+            AND EA_NUM = E1_NUM AND EA_PARCELA = E1_PARCELA AND SEA.%NOTDEL%
+        WHERE E1_FILIAL = %xFilial:SE1%
+            AND E1_EMISSAO <= %Exp:cData%
+            AND E1_SALDO > 0
+            AND E1_NUMBOR <> ''
+            AND EA_PORTANT = '001'
+            AND EA_BORAPI <> 'S'
+            AND SE1.%NOTDEL%
+	EndSql	
+
+	While (cAliasSEA)->(!EOF())
+
+        SEA->(DbGoto((cAliasSEA)->RECSEA))
+
+        //Habilita o registro para ser registrado no banco via JOB FINA713
+        RecLock("SEA",.F.)
+            SEA->EA_BORAPI := 'S'
+        MsUnlock()
+
+
+        (cAliasSEA)->(DbSkip())
+    End
+
+	RpcClearEnv()
+
+Return

@@ -1,0 +1,96 @@
+//Bibliotecas
+#Include "tlpp-core.th"
+#Include "tlpp-rest.th"
+#Include "Totvs.ch"
+
+//Declaração da namespace
+Namespace custom.rest.cyberlog.saldoestoque
+  
+/*/{Protheus.doc} User Function WMSConsultaSaldo
+     WS para buscar os dados de estoque em formato CSV
+    @type  Function
+    @author Alfred Andersen
+    @since 05/05/2025
+    @requester Moizéis
+    @consultancy Harpia
+    @site www.harpiaconsultoria.com
+/*/
+  
+@Get("Cyberlog/get/saldoestoque/")
+
+User Function WMSConsultaSaldo()
+
+    Local jResponse  := JsonObject():New() as Json
+    Local jPath                            as Json
+    Local cAlias     := GetNextAlias()     as Character
+    Local cCSVReturn := ""                 as Character
+
+    //Busca os dados que o usuário informou
+    jPath := JsonObject():New()
+    jPath := oRest:getQueryRequest()
+
+    BeginSql Alias cAlias
+        SELECT 
+            B2_FILIAL, B1_COD, B1_DESC, SUM(B2_QATU) QTD
+        FROM 
+            %Table:SB2% SB2
+        INNER JOIN
+            %Table:SB1% SB1 ON SB1.%NOTDEL%
+            AND B1_COD = B2_COD
+        WHERE SB2.%NOTDEL%
+            AND B2_FILIAL = "020201"
+            AND B2_LOCAL = '01'
+            AND B2_QATU >= 0
+        GROUP BY 
+            B2_FILIAL, B1_COD, B1_DESC 
+        ORDER BY 
+            B2_FILIAL, B1_COD, B1_DESC
+    EndSql	
+   
+    If !(cAlias)->(EoF())
+
+        //Enquanto houver dados
+        While ! (cAlias)->(EoF())
+
+            If (cAlias)->QTD > 0
+
+                //Posição 2
+                cLinha     :=  Alltrim((cAlias)->B1_COD)
+                
+                //Posição 3
+                cLinha     += ';1;'
+
+                //Posição 4
+                cLinha     += ';' + Alltrim(Transform((cAlias)->QTD,"@E 99999999999.99"))
+                
+                //Posições 5 a 8
+                cLinha     += ';;;'
+
+                //Escreve acLineTheEnd linha com a quebra do CRLF no fim
+                cCSVReturn += cLinha + CRLF
+            
+            End
+
+            (cAlias)->(DbSkip())
+
+        EndDo
+
+    Else
+
+        oRest:setStatusCode(500)
+        jResponse[ 'errorId' ]  := 'ID002'
+        jResponse[ 'error' ]    := 'Dados não encontrados'
+        jResponse[ 'solution' ] := 'Não foi possível obter dados na consulta'
+    
+    End
+  
+    If Empty(cCSVReturn)
+        //Encerra retornando o JSON
+        oRest:setKeyHeaderResponse('Content-Type','application/json')
+        oRest:setResponse(jResponse:toJSON())
+    Else
+        oRest:setKeyHeaderResponse('Content-Type','text/csv')
+        oRest:setResponse(cCSVReturn)
+    End
+
+Return

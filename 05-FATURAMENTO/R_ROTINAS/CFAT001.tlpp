@@ -1,0 +1,75 @@
+
+/*/{Protheus.doc} CFAT001
+    Exibe uma tela com os logs dos motivos de bloqueio por regra
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 22/09/2023
+    @requester Kleber Moro
+    @consultancy Harpia
+    @site www.harpiaconsultoria.com
+/*/
+User Function CFAT001
+
+	Private aBrowse     := {}
+	Private oTable
+	Private oBrowseData
+	Private cFilter := ""
+	Private cEnvio := ""
+	Private cRet := ""
+	Private oMemo
+	Private oMemo1
+	Private aCoors := {}
+
+	//Filto para seleção de titulo na SZ2 de acordo com titulo posicionado na E1
+	cFilter := "SZ2->Z2_FILIAL =='" +SC5->C5_FILIAL  + "'"
+	cFilter += ".AND.SZ2->Z2_NUM =='" +SC5->C5_NUM + "'"	
+
+	//oMainWnd propriedade global de tela
+	aCoors     := FWGetDialogSize(oMainWnd)
+
+	//Montagem da tela princial
+	#DEFINE DS_MODALFRAME   128
+
+	Define MSDialog oDialog Title "Consulta Log" From aCoors[1], aCoors[2] to aCoors[3], aCoors[4] Pixel Style DS_MODALFRAME
+	oFwLayer := FwLayer():New()
+	oFwLayer:Init(oDialog,.F.,.T.)
+
+	oFWLayer:addLine("TOP"      , 100, .F.)
+
+	//Divisão da tela principal em duas colunas
+	oFWLayer:addCollumn("COL01", 100, .T., "TOP")
+	//oFWLayer:addCollumn("COL02", 050, .T., "TOP")
+
+	//Divisão da segunda coluna em dois box
+	oFWLayer:AddWindow("COL01","PANEL01","Detalhes"     , 100, .F.,,, "TOP" )
+	//oFWLayer:AddWindow("COL02","PANEL01","Envio"            , 050, .F.,,, "TOP" )
+	//oFWLayer:AddWindow("COL02","PANEL02","Retorno"            , 050, .F.,,, "TOP" )
+
+	//Criação de dos paineis dentro de tela principal
+	oPanelData     := oFWLayer:GetWinPanel("COL01","PANEL01","TOP")
+	//oPanelEnvi     := oFWLayer:GetWinPanel("COL02","PANEL01","TOP")
+	//oPanelRet      := oFWLayer:GetWinPanel("COL02","PANEL02","TOP")
+
+	//Estrutura do BrowseData dentro da tela principal
+	oBrowseData := FWMBrowse():New()
+	oBrowseData:SetOwner(oPanelData)
+	oBrowseData:SetMenuDef("")
+	oBrowseData:SetAlias("SZ2")
+	oBrowseData:SetFilterDefault(cFilter)
+	//oBrowseData:SetChange({|| ::SetInfo()})
+	oBrowseData:SetOnlyFields({"Z2_DATA","Z2_HORA","Z2_MOTIVO","Z2_MSG","Z2_STATUS"})
+	oBrowseData:DisableLocate()
+	oBrowseData:DisableSeek()
+	oBrowseData:SetIgnoreARotina(.T.)
+	oBrowseData:DisableDetails()
+	oBrowseData:SetUseFilter(.F.)
+	oBrowseData:DisableReport()
+	oBrowseData:DisableConfig()
+	oBrowseData:Refresh(.T.)
+	oBrowseData:Activate()
+
+	oDialog:Activate()
+
+
+Return

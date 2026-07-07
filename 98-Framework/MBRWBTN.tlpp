@@ -1,0 +1,22 @@
+#INCLUDE "PROTHEUS.CH"
+#INCLUDE "TOPCONN.CH"
+#INCLUDE 'FWMVCDEF.CH'
+
+/*/{Protheus.doc} MBRWBTN
+	Ponto de entrada para validação de acesso - CUIDADO - Utilizado em todas as MBROWSE.
+	@type function
+	@version 1.0
+	@author Alfred Andersen
+	@since 7/22/2024
+	@requester Kleber Moro
+	@consultancy Harpia
+	@site www.harpiaconsultoria.com
+/*/
+User Function MBRWBTN()
+
+	Local oObjMBRWBTN	:= TMBRWBTN():New()
+	Local lRet          := .T.
+
+	lRet := oObjMBRWBTN:Processa()
+
+Return(lRet)

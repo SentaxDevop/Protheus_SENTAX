@@ -1,0 +1,1338 @@
+#INCLUDE "PROTHEUS.CH"
+#INCLUDE "TOPCONN.CH"
+#INCLUDE "FWMVCDEF.CH"
+#Include "TOTVS.ch"
+#Include "RESTFul.ch"
+
+/*/{Protheus.doc} TSalesTarget
+Classe responsável pela atualização das tabelas STXMETA e METAVEND
+Regras herdadas do JOB em SQL do ambiente local, transportados para este código devido a migração da estrutura para o Cloud TOTVS.
+@type class
+@version 1.0
+@author Alfred Andersen
+@since 28/06/2023
+@requester Kleber Moro
+@consultancy Harpia
+@site www.harpiaconsultoria.com
+/*/
+Class TSalesTarget
+
+	Public Data dData                     as Date
+	Public Data cAnoMes                   as Character
+	Public Data cAnoMesLike               as Character
+	Public Data nTotalDiasUteisMes        as Numeric
+	Public Data nTotalDiasUteisDecorridos as Numeric
+	
+	Public Method New() Constructor
+	Public Method Process()
+    Public Method DeleteSTXMETA()
+    Public Method InsertSTXMETA()
+	Public Method SavesReturns()
+	Public Method InsertMETAVEND()
+	Public Method UpdateMETAVEND()
+	Public Method UpdateMETAVENDDias()
+	Public Method UpdateSTXMETA1()
+	Public Method UpdateSTXMETA2()	
+
+EndClass
+
+/*/{Protheus.doc} TSalesTarget::New
+Método que inicia a instãncia da classe 
+@type method
+@version 1.0
+@author Alfred Andersen
+@since 28/06/2023
+@requester Kleber Moro
+@consultancy Harpia
+@site www.harpiaconsultoria.com
+/*/
+Method New() Class TSalesTarget
+
+	::dData                     := CTOD("//")
+	::cAnoMes                   := ""
+	::cAnoMesLike               := ""
+	::nTotalDiasUteisMes        := 0
+	::nTotalDiasUteisDecorridos := 0
+
+Return(Self)
+
+/*/{Protheus.doc} TSalesTarget::Process
+Método centralizador do processamento da classe
+@type method
+@version 1.0
+@author Alfred Andersen
+@since 28/06/2023
+@requester Kleber Moro
+@consultancy Harpia
+@site www.harpiaconsultoria.com
+/*/
+Method Process() Class TSalesTarget
+
+	ConOut("["+cEmpAnt+"|"+cFilAnt+"]"+" - Iniciando as chamadas dos processamentos da classe TSalesTarget. Período: "	+	::cAnoMes + "	Inicio " + DTOC(dDatabase) + " - " + TIME())
+
+	ConOut("Chamada de delecao da tabela STXMETA")
+	::DeleteSTXMETA()
+
+	ConOut("Chamada de Insercao da tabela STXMETA")
+	::InsertSTXMETA()
+
+	ConOut("Calcula as devoluções e grava na tabela STXMETA")
+	::SavesReturns()
+
+	ConOut("Insere o valor atual da meta do vendedor caso não exista para o mês - Tabela METAVEND. ")
+	::InsertMETAVEND()
+
+	ConOut("Atualiza as métricas de vendas. Tabela METAVEND")
+	::UpdateMETAVEND()
+
+	ConOut("Atualiza os dias Uteis e já decorridos. Tabela METAVEND")
+	::UpdateMETAVENDDias()
+
+	ConOut("Update complementar de correção de dias passados de outros meses. Tabela STXMETA")
+	::UpdateSTXMETA1()
+
+	ConOut("Update complementar de atualização dos dias do mes atual. Tabela STXMETA")
+	::UpdateSTXMETA2()
+
+	ConOut("["+cEmpAnt+"|"+cFilAnt+"]"+" - Processamentos FINALIZADOS - Hora: " + TIME())
+
+Return
+
+/*/{Protheus.doc} TSalesTarget::DeleteSTXMETA
+Detela os registros da tabela STXMETA para posterior atualização
+@type method
+@version 1.0
+@author Alfred Andersen
+@since 28/06/2023
+@requester Kleber Moro
+@consultancy Harpia
+@site www.harpiaconsultoria.com
+/*/
+Method DeleteSTXMETA() Class TSalesTarget
+
+	Local cUpdate as Character
+	Local nUpdate as Numeric
+
+	cUpdate := ""
+	nUpdate := 0
+
+	cUpdate := " DELETE STXMETA"
+	cUpdate += " WHERE STXMETA_EMISSAO LIKE " + ValToSql(::cAnoMesLike)
+
+	cUpdate := UPPER(cUpdate)
+
+	nUpdate := TcSqlExec(cUpdate)
+
+	If (nUpdate < 0)
+		ConOut("LOG DO UPDATE: " + TCSQLError())
+	EndIf
+
+	ConOut("Finalizado: DeleteSTXMETA " + "Data " + DTOC(dDatabase) + " - " + TIME())
+
+Return
+
+/*/{Protheus.doc} TSalesTarget::InsertSTXMETA
+Atualiza a tabela STXMETA com os novos dados 
+@type method
+@version 1.0
+@author Alfred Andersen
+@since 28/06/2023
+@requester Kleber Moro
+@consultancy Harpia
+@site www.harpiaconsultoria.com
+/*/
+Method InsertSTXMETA() Class TSalesTarget
+
+	Local cInsert as Character
+	Local nInsert as Numeric
+
+	cInsert := ""
+	nInsert := 0
+	
+	cInsert += "INSERT INTO CZ2O05_152804_PR_PD.[dbo].[STXMETA]"
+	cInsert += "           ([STXMETA_FILIAL]"
+	cInsert += "           ,[STXMETA_EMISSAO]"
+	cInsert += "           ,[STXMETA_VEND]"
+	cInsert += "           ,[STXMETA_NREDUZ]"
+	cInsert += "           ,[STXMETA_META]"
+	cInsert += "           ,[STXMETA_REGIAL]"
+	cInsert += "           ,[STXMETA_TDIAS]"
+	cInsert += "           ,[STXMETA_TDIASP]"
+	cInsert += "           ,[STXMETA_PRCVEN]"
+	cInsert += "           ,[STXMETA_MAQUINA]"
+	cInsert += "           ,[STXMETA_ECOLAB]"
+	cInsert += "           ,[STXMETA_RUBBERMAID]"
+	cInsert += "		   ,[STXMETA_VLAVAZZA]"
+	cInsert += "           ,[STXMETA_DPRCVEN]"
+	cInsert += "           ,[STXMETA_DMAQUINA]"
+	cInsert += "           ,[STXMETA_DECOLAB]"
+	cInsert += "           ,[STXMETA_DRUBBERMAID]"
+	cInsert += "		   ,[STXMETA_DLAVAZZA]"
+	cInsert += "           ,[STXMETA_CNOVO]"
+	cInsert += "           ,[STXMETA_CREATIVO]"
+	cInsert += "           ,[STXMETA_CMIX]"
+	cInsert += "           ,[STXMETA_QTDMAQ]"
+	cInsert += "           ,[STXMETA_DQTDMAQ]"
+	cInsert += "           ,[D_E_L_E_T_]"
+	cInsert += "		   ,[STXMETA_VLECO]"
+	cInsert += "		   ,[STXMETA_VLRUBB]"
+	cInsert += "		   ,[STXMETA_TIPOVEND])"
+	cInsert += "		   "
+	cInsert += "			SELECT DISTINCT "
+	cInsert += "			 'SENTAX' AS 'GRUPO',  F2.F2_EMISSAO AS EMISSAO, F2.F2_VEND1 AS 'VEND', RTRIM(A3.A3_NREDUZ) AS 'NVEND', CT.CT_VALOR, "
+	cInsert += "			 CASE WHEN (CT_REGIAO = '001') THEN 'CAPITAL' WHEN (CT_REGIAO IN ('009')) THEN 'INTERIOR' WHEN (CT_REGIAO IN ('010')) "
+	cInsert += "			 THEN 'SC' WHEN (CT_REGIAO IN ('011')) THEN 'Televendas' "
+	cInsert += "			 WHEN (CT_REGIAO IN ('013')) THEN 'ZZ-AREA_TEC.'"
+	cInsert += "			 ELSE 'ZZ-OUTRA' END AS REGIAO,"
+	cInsert += "				 (SELECT       " + ValToSql(::nTotalDiasUteisMes) + "	 AS Expr1) AS TOTAL_DIAS,"
+	cInsert += "				 (SELECT       " + ValToSql(::nTotalDiasUteisDecorridos) + " AS Expr1) AS TOTAL_PASSADO, "
+	cInsert += "											 "
+	cInsert += "				 ISNULL"
+	cInsert += "				 ((SELECT        SUM(dbo.SD2010.D2_QUANT * dbo.SD2010.D2_PRCVEN) AS Expr1"
+	cInsert += "						 FROM            dbo.SD2010 INNER JOIN"
+	cInsert += "											  dbo.SF2010 AS F3 ON F3.F2_FILIAL = dbo.SD2010.D2_FILIAL AND F3.F2_DOC = dbo.SD2010.D2_DOC AND "
+	cInsert += "											  F3.F2_SERIE = dbo.SD2010.D2_SERIE AND F3.F2_EMISSAO = F2.F2_EMISSAO AND F3.F2_TIPO = 'N' AND "
+	cInsert += "											  F3.F2_DUPL <> ' ' AND F3.D_E_L_E_T_ <> '*' AND F3.F2_VEND1 = F2.F2_VEND1 INNER JOIN"
+	cInsert += "											  dbo.SB1010 ON dbo.SB1010.B1_FILIAL = ' ' AND dbo.SB1010.B1_COD = dbo.SD2010.D2_COD AND dbo.SB1010.D_E_L_E_T_ = ' ' AND "
+	cInsert += "											  dbo.SB1010.B1_GRUPO <> '0600'"
+	cInsert += "					 WHERE        (dbo.SD2010.D2_EMISSAO = F2.F2_EMISSAO)), 0) AS 'PRCVEN', ISNULL"
+	cInsert += "				 ((SELECT        SUM(SD2010_2.D2_QUANT * SD2010_2.D2_PRCVEN) AS Expr1"
+	cInsert += "					 FROM            dbo.SD2010 AS SD2010_2 INNER JOIN"
+	cInsert += "											  dbo.SF2010 AS F3 ON F3.F2_FILIAL = SD2010_2.D2_FILIAL AND F3.F2_DOC = SD2010_2.D2_DOC AND "
+	cInsert += "											  F3.F2_SERIE = SD2010_2.D2_SERIE AND F3.F2_EMISSAO = F2.F2_EMISSAO AND F3.F2_TIPO = 'N' AND "
+	cInsert += "											  F3.F2_DUPL <> ' ' AND F3.D_E_L_E_T_ <> '*' AND F3.F2_VEND1 = F2.F2_VEND1 INNER JOIN"
+	cInsert += "											  dbo.SB1010 AS SB1010_5 ON SB1010_5.B1_FILIAL = ' ' AND SB1010_5.B1_COD = SD2010_2.D2_COD AND SB1010_5.D_E_L_E_T_ = ' ' AND "
+	cInsert += "											  SB1010_5.B1_GRUPO = '0600'"
+	cInsert += "					 WHERE        (SD2010_2.D2_EMISSAO = F2.F2_EMISSAO)), 0) AS 'MAQUINAS', ISNULL"
+	cInsert += "				 ((SELECT        SUM(SD2010_1.D2_QUANT * SD2010_1.D2_PRCVEN) AS Expr1"
+	cInsert += "					 FROM            dbo.SD2010 AS SD2010_1 INNER JOIN"
+	cInsert += "											  dbo.SF2010 AS F3 ON F3.F2_FILIAL = SD2010_1.D2_FILIAL AND F3.F2_DOC = SD2010_1.D2_DOC AND "
+	cInsert += "											  F3.F2_SERIE = SD2010_1.D2_SERIE AND F3.F2_EMISSAO = F2.F2_EMISSAO AND F3.F2_TIPO = 'N' AND "
+	cInsert += "											  F3.F2_DUPL <> ' ' AND F3.D_E_L_E_T_ <> '*' AND F3.F2_VEND1 = F2.F2_VEND1 INNER JOIN"
+	cInsert += "											  dbo.SB1010 AS SB1010_4 ON SB1010_4.B1_FILIAL = ' ' AND SB1010_4.B1_COD = SD2010_1.D2_COD AND SB1010_4.D_E_L_E_T_ = ' ' AND "
+	cInsert += "											  SB1010_4.B1_PROC = '000014'"
+	cInsert += "					 WHERE        (SD2010_1.D2_EMISSAO = F2.F2_EMISSAO)), 0) AS 'ECOLAB', ISNULL"
+	cInsert += "				 ((SELECT        SUM(SD2010_1.D2_QUANT * SD2010_1.D2_PRCVEN) AS Expr1"
+	cInsert += "					 FROM            dbo.SD2010 AS SD2010_1 INNER JOIN"
+	cInsert += "											  dbo.SF2010 AS F3 ON F3.F2_FILIAL = SD2010_1.D2_FILIAL AND F3.F2_DOC = SD2010_1.D2_DOC AND "
+	cInsert += "											  F3.F2_SERIE = SD2010_1.D2_SERIE AND F3.F2_EMISSAO = F2.F2_EMISSAO AND F3.F2_TIPO = 'N' AND "
+	cInsert += "											  F3.F2_DUPL <> ' ' AND F3.D_E_L_E_T_ <> '*' AND F3.F2_VEND1 = F2.F2_VEND1 INNER JOIN"
+	cInsert += "											  dbo.SB1010 AS SB1010_4 ON SB1010_4.B1_FILIAL = ' ' AND SB1010_4.B1_COD = SD2010_1.D2_COD AND SB1010_4.D_E_L_E_T_ = ' ' AND "
+	cInsert += "											  SB1010_4.B1_PROC  IN('000083','000242')"
+	cInsert += "					 WHERE        (SD2010_1.D2_EMISSAO = F2.F2_EMISSAO)), 0) AS 'RUBBERMAID',ISNULL"
+	cInsert += "				((SELECT        SUM(SD2010_1.D2_QUANT * SD2010_1.D2_PRCVEN) AS Expr1"
+	cInsert += "					 FROM            dbo.SD2010 AS SD2010_1 INNER JOIN"
+	cInsert += "											  dbo.SF2010 AS F3 ON F3.F2_FILIAL = SD2010_1.D2_FILIAL AND F3.F2_DOC = SD2010_1.D2_DOC AND "
+	cInsert += "											  F3.F2_SERIE = SD2010_1.D2_SERIE AND F3.F2_EMISSAO = F2.F2_EMISSAO AND F3.F2_TIPO = 'N' AND "
+	cInsert += "											  F3.F2_DUPL <> ' ' AND F3.D_E_L_E_T_ <> '*' AND F3.F2_VEND1 = F2.F2_VEND1 INNER JOIN"
+	cInsert += "											  dbo.SB1010 AS SB1010_4 ON SB1010_4.B1_FILIAL = ' ' AND SB1010_4.B1_COD = SD2010_1.D2_COD AND SB1010_4.D_E_L_E_T_ = ' ' AND "
+	cInsert += "											  SB1010_4.B1_GRUPO = '1003'"
+	cInsert += "					 WHERE        (SD2010_1.D2_EMISSAO = F2.F2_EMISSAO)), 0)AS 'LAVAZZA' ,ISNULL"
+	cInsert += "				 ((SELECT        SUM(dbo.SD1010.D1_QUANT * dbo.SD1010.D1_VUNIT - dbo.SD1010.D1_VALDESC) AS Expr1"
+	cInsert += "					 FROM            dbo.SD1010 INNER JOIN"
+	cInsert += "											  dbo.SF2010 AS F1 ON F1.F2_FILIAL = dbo.SD1010.D1_FILIAL AND F1.F2_DOC = dbo.SD1010.D1_NFORI AND "
+	cInsert += "											  F1.F2_SERIE = dbo.SD1010.D1_SERIORI AND  "
+	cInsert += "											  F1.F2_TIPO = 'N' AND F1.F2_DUPL <> ' ' AND F1.D_E_L_E_T_ <> '*' AND F1.F2_VEND1 = F2.F2_VEND1 INNER JOIN"
+	cInsert += "											  dbo.SB1010 AS SB1010_3 ON SB1010_3.B1_FILIAL = ' ' AND SB1010_3.B1_COD = dbo.SD1010.D1_COD AND "
+	cInsert += "											  SB1010_3.D_E_L_E_T_ = ' ' AND SB1010_3.B1_GRUPO <> '0600'"
+	cInsert += "					 WHERE        (dbo.SD1010.D1_EMISSAO = F2.F2_EMISSAO) AND (dbo.SD1010.D1_TIPO = 'D') AND "
+	cInsert += "											  (dbo.SD1010.D1_CF <> '1908') AND (dbo.SD1010.D1_CF <> '1909') AND (dbo.SD1010.D1_CF <> '1912') AND (dbo.SD1010.D1_CF <> '1913') AND (dbo.SD1010.D_E_L_E_T_= ' ') "
+	cInsert += "											  AND (F1.D_E_L_E_T_ = ' ')), 0) AS 'DPRCVEN', ISNULL"
+	cInsert += "				 ((SELECT        SUM(SD1010_2.D1_QUANT * SD1010_2.D1_VUNIT - SD1010_2.D1_VALDESC) AS Expr1"
+	cInsert += "					 FROM            dbo.SD1010 AS SD1010_2 INNER JOIN"
+	cInsert += "											  dbo.SF2010 AS F1 ON F1.F2_FILIAL = SD1010_2.D1_FILIAL AND F1.F2_DOC = SD1010_2.D1_NFORI AND "
+	cInsert += "											  F1.F2_SERIE = SD1010_2.D1_SERIORI  AND F1.F2_TIPO = 'N' AND"
+	cInsert += "											   F1.F2_DUPL <> ' ' AND F1.D_E_L_E_T_ <> '*' AND F1.F2_VEND1 = F2.F2_VEND1 INNER JOIN"
+	cInsert += "											  dbo.SB1010 AS SB1010_2 ON SB1010_2.B1_FILIAL = ' ' AND SB1010_2.B1_COD = SD1010_2.D1_COD AND SB1010_2.D_E_L_E_T_ = ' ' AND "
+	cInsert += "											  SB1010_2.B1_GRUPO = '0600'"
+	cInsert += "					 WHERE        (SD1010_2.D1_EMISSAO = F2.F2_EMISSAO) AND (SD1010_2.D1_TIPO = 'D') AND "
+	cInsert += "											  (SD1010_2.D1_CF <> '1908') AND (SD1010_2.D1_CF <> '1909') AND (SD1010_2.D1_CF <> '1912') AND (SD1010_2.D1_CF <> '1913') AND "
+	cInsert += "											  (F1.D_E_L_E_T_ = ' ')), 0) AS 'DMAQUINAS', ISNULL"
+	cInsert += "				 ((SELECT        SUM(SD1010_1.D1_QUANT * SD1010_1.D1_VUNIT  - SD1010_1.D1_VALDESC ) AS Expr1"
+	cInsert += "					 FROM            dbo.SD1010 AS SD1010_1 INNER JOIN"
+	cInsert += "											  dbo.SF2010 AS F1 ON F1.F2_FILIAL = SD1010_1.D1_FILIAL AND F1.F2_DOC = SD1010_1.D1_NFORI AND "
+	cInsert += "											  F1.F2_SERIE = SD1010_1.D1_SERIORI AND F1.F2_TIPO = 'N' AND"
+	cInsert += "											   F1.F2_DUPL <> ' ' AND F1.D_E_L_E_T_ <> '*' AND F1.F2_VEND1 = F2.F2_VEND1 INNER JOIN"
+	cInsert += "											  dbo.SB1010 AS SB1010_1 ON SB1010_1.B1_FILIAL = ' ' AND SB1010_1.B1_COD = SD1010_1.D1_COD AND SB1010_1.D_E_L_E_T_ = ' ' AND "
+	cInsert += "											  SB1010_1.B1_PROC = '000014'"
+	cInsert += "					 WHERE        (SD1010_1.D1_EMISSAO = F2.F2_EMISSAO) AND (SD1010_1.D1_TIPO = 'D') AND "
+	cInsert += "											  (SD1010_1.D1_CF <> '1908') AND (SD1010_1.D1_CF <> '1909') AND (SD1010_1.D1_CF <> '1912') AND (SD1010_1.D1_CF <> '1913') AND "
+	cInsert += "											  (F1.D_E_L_E_T_ = ' ')), 0) AS 'DECOLAB', ISNULL"
+	cInsert += "				 ((SELECT        SUM(SD1010_1.D1_QUANT * SD1010_1.D1_VUNIT - SD1010_1.D1_VALDESC ) AS Expr1"
+	cInsert += "					 FROM            dbo.SD1010 AS SD1010_1 INNER JOIN"
+	cInsert += "											  dbo.SF2010 AS F1 ON F1.F2_FILIAL = SD1010_1.D1_FILIAL AND F1.F2_DOC = SD1010_1.D1_NFORI AND "
+	cInsert += "											  F1.F2_SERIE = SD1010_1.D1_SERIORI  AND F1.F2_TIPO = 'N' AND"
+	cInsert += "											   F1.F2_DUPL <> ' ' AND F1.D_E_L_E_T_ <> '*' AND F1.F2_VEND1 = F2.F2_VEND1 INNER JOIN"
+	cInsert += "											  dbo.SB1010 AS SB1010_1 ON SB1010_1.B1_FILIAL = ' ' AND SB1010_1.B1_COD = SD1010_1.D1_COD AND SB1010_1.D_E_L_E_T_ = ' ' AND "
+	cInsert += "											  SB1010_1.B1_PROC IN('000083','000242')"
+	cInsert += "					 WHERE        (SD1010_1.D1_EMISSAO = F2.F2_EMISSAO) AND (SD1010_1.D1_TIPO = 'D') AND "
+	cInsert += "											  (SD1010_1.D1_CF <> '1908') AND (SD1010_1.D1_CF <> '1909') AND (SD1010_1.D1_CF <> '1912') AND (SD1010_1.D1_CF <> '1913') AND "
+	cInsert += "											  (F1.D_E_L_E_T_ = ' ')), 0) AS 'DRUBBERMAID',ISNULL"
+	cInsert += "                ((SELECT        SUM(SD1010_2.D1_QUANT * SD1010_2.D1_VUNIT) AS Expr1"
+	cInsert += "                   FROM            dbo.SD1010 AS SD1010_2 INNER JOIN"
+	cInsert += "                                   dbo.SF2010 AS F1 ON F1.F2_FILIAL = SD1010_2.D1_FILIAL AND F1.F2_DOC = SD1010_2.D1_NFORI AND "
+	cInsert += "                                   F1.F2_SERIE = SD1010_2.D1_SERIORI   AND F1.F2_TIPO = 'N' AND"
+	cInsert += "                                   F1.F2_DUPL <> ' ' AND F1.D_E_L_E_T_ <> '*' AND F1.F2_VEND1 = F2.F2_VEND1 INNER JOIN"
+	cInsert += "                                   dbo.SB1010 AS SB1010_2 ON SB1010_2.B1_FILIAL = ' ' AND SB1010_2.B1_COD = SD1010_2.D1_COD AND SB1010_2.D_E_L_E_T_ = ' ' AND "
+	cInsert += "                                   SB1010_2.B1_GRUPO = '1003'"
+	cInsert += "                   WHERE        (SD1010_2.D1_EMISSAO = F2.F2_EMISSAO) AND (SD1010_2.D1_TIPO = 'D') AND "
+	cInsert += "                                (SD1010_2.D1_CF <> '1908') AND (SD1010_2.D1_CF <> '1909') AND (SD1010_2.D1_CF <> '1912') AND (SD1010_2.D1_CF <> '1913') AND "
+	cInsert += "                                (F1.D_E_L_E_T_ = ' ')), 0) AS 'DLAVAZZA',"
+	cInsert += ""
+	cInsert += "				(SELECT count( distinct(UA_CLIENTE+UA_LOJA)  )  FROM SUA010 "
+	cInsert += "					INNER JOIN dbo.SF2010 AS F3 "
+	cInsert += "						ON F3.F2_FILIAL = dbo.SUA010.UA_FILIAL AND F3.F2_DOC = dbo.SUA010.UA_DOC AND "
+	cInsert += "						F3.F2_SERIE = dbo.SUA010.UA_SERIE AND F3.F2_EMISSAO = dbo.SUA010.UA_EMISNF AND F3.F2_TIPO = 'N' AND "
+	cInsert += "						F3.F2_DUPL <> ' ' AND F3.D_E_L_E_T_ = ' '"
+	cInsert += "					WHERE  "
+	cInsert += "					(UA_EMISNF = F2.F2_EMISSAO) AND UA_VEND = F2.F2_VEND1 AND UA_CODLIG ='000019'AND SUA010.D_E_L_E_T_ =' ') AS CLI_NOVO,"
+	cInsert += "				(SELECT count( distinct(UA_CLIENTE+UA_LOJA)  )  FROM SUA010 "
+	cInsert += "					INNER JOIN dbo.SF2010 AS F3 "
+	cInsert += "						ON F3.F2_FILIAL = dbo.SUA010.UA_FILIAL AND F3.F2_DOC = dbo.SUA010.UA_DOC AND "
+	cInsert += "						F3.F2_SERIE = dbo.SUA010.UA_SERIE AND F3.F2_EMISSAO = dbo.SUA010.UA_EMISNF AND F3.F2_TIPO = 'N' AND "
+	cInsert += "						F3.F2_DUPL <> ' ' AND F3.D_E_L_E_T_ = ' '"
+	cInsert += "					WHERE "
+	cInsert += "					(UA_EMISNF = F2.F2_EMISSAO) AND UA_VEND = F2.F2_VEND1  AND UA_CODLIG ='000020'AND SUA010.D_E_L_E_T_ =' ') AS CLI_REATIVO,"
+	cInsert += "				(SELECT count( distinct(UA_CLIENTE+UA_LOJA)  )  FROM SUA010 "
+	cInsert += "					INNER JOIN dbo.SF2010 AS F3 "
+	cInsert += "						ON F3.F2_FILIAL = dbo.SUA010.UA_FILIAL AND F3.F2_DOC = dbo.SUA010.UA_DOC AND "
+	cInsert += "						F3.F2_SERIE = dbo.SUA010.UA_SERIE AND F3.F2_EMISSAO = dbo.SUA010.UA_EMISNF AND F3.F2_TIPO = 'N' AND "
+	cInsert += "						F3.F2_DUPL <> ' ' AND F3.D_E_L_E_T_ = ' '"
+	cInsert += "					WHERE  "
+	cInsert += "					(UA_EMISNF = F2.F2_EMISSAO) AND UA_VEND = F2.F2_VEND1  AND UA_CODLIG ='000086' AND SUA010.D_E_L_E_T_ =' ') AS CLI_MIX,"
+	cInsert += ""
+	cInsert += "				ISNULL((SELECT  SUM(D5.D2_QUANT) "
+	cInsert += "					FROM  dbo.SD2010 AS D5 "
+	cInsert += "					INNER JOIN SF4010 F4 ON F4_FILIAL = SUBSTRING( D5.D2_FILIAL,1,4) "
+	cInsert += "							AND F4_CODIGO = D5.D2_TES "
+	cInsert += "							AND F4_DUPLIC  ='S' "
+	cInsert += "							and F4.D_E_L_E_T_ = ' ' "
+	cInsert += "					INNER JOIN dbo.SB1010 AS B1 ON B1.B1_FILIAL = ' ' "
+	cInsert += "							AND B1.B1_COD = D5.D2_COD AND B1.D_E_L_E_T_ = ' ' "
+	cInsert += "							AND B1.B1_GRUPO = '0600'"
+	cInsert += "					INNER JOIN  dbo.SF2010 AS F3 ON F3.F2_FILIAL = D5.D2_FILIAL "
+	cInsert += "							AND F3.F2_DOC = D5.D2_DOC "
+	cInsert += "							AND F3.F2_SERIE = D5.D2_SERIE "
+	cInsert += "							AND (F3.F2_EMISSAO = F2.F2_EMISSAO)   "
+	cInsert += "							AND F3.F2_TIPO = 'N' "
+	cInsert += "							AND F3.D_E_L_E_T_ <> '*' "
+	cInsert += "							and F3.F2_VEND1 = F2.F2_VEND1"
+	cInsert += "					WHERE   (D5.D2_EMISSAO = F2.F2_EMISSAO)  "
+	cInsert += "							AND D5.D_E_L_E_T_ = ' ') ,0) AS 'QTDMAQ',"
+	cInsert += ""
+	cInsert += "					ISNULL"
+	cInsert += "                    ((SELECT        SUM(SD1010_2.D1_QUANT) AS Expr1"
+	cInsert += "                       FROM            dbo.SD1010 AS SD1010_2 INNER JOIN"
+	cInsert += "                                       dbo.SF2010 AS F1 ON F1.F2_FILIAL = SD1010_2.D1_FILIAL AND F1.F2_DOC = SD1010_2.D1_NFORI AND "
+	cInsert += "                                       F1.F2_SERIE = SD1010_2.D1_SERIORI   AND F1.F2_TIPO = 'N' AND"
+	cInsert += "                                       F1.F2_DUPL <> ' ' AND F1.D_E_L_E_T_ <> '*' AND F1.F2_VEND1 = F2.F2_VEND1 INNER JOIN"
+	cInsert += "                                       dbo.SB1010 AS SB1010_2 ON SB1010_2.B1_FILIAL = ' ' AND SB1010_2.B1_COD = SD1010_2.D1_COD AND SB1010_2.D_E_L_E_T_ = ' ' AND "
+	cInsert += "                                      SB1010_2.B1_GRUPO = '0600'"
+	cInsert += "                      WHERE        (SD1010_2.D1_EMISSAO = F2.F2_EMISSAO) AND (SD1010_2.D1_TIPO = 'D') AND "
+	cInsert += "                                   (SD1010_2.D1_CF <> '1908') AND (SD1010_2.D1_CF <> '1909') AND (SD1010_2.D1_CF <> '1912') AND (SD1010_2.D1_CF <> '1913') AND "
+	cInsert += "                                   (F1.D_E_L_E_T_ = ' ')), 0) AS 'DQTDMAQ',"
+	cInsert += "														  "
+	cInsert += "					' ',CT_VLECO,CT_VLRUBB,'1'"
+	cInsert += ""
+	cInsert += ""
+	cInsert += "				FROM dbo.SF2010 AS F2 "
+	cInsert += "				INNER JOIN	dbo.SCT010 AS CT "
+	cInsert += "					ON CT.CT_VEND = F2.F2_VEND1 AND CT.D_E_L_E_T_ = ' ' "
+	cInsert += "				LEFT OUTER JOIN dbo.SA3010 AS A3 "
+	cInsert += "					ON A3.A3_COD = F2.F2_VEND1 AND A3.D_E_L_E_T_ = ' ' "
+	cInsert += "				WHERE         F2.F2_EMISSAO LIKE  " + ValToSql(::cAnoMesLike) + " AND (F2.F2_TIPO = 'N') AND (F2.F2_DUPL <> ' ')"
+	cInsert += "				 AND (F2.D_E_L_E_T_ <> '*')  "
+	cInsert += "							  "
+	cInsert += ""
+	//--Vendedor 2
+	cInsert += "		UNION ALL"
+	cInsert += "				 "
+	cInsert += "		SELECT DISTINCT "
+	cInsert += "                         'SENTAX' AS 'GRUPO',   F2.F2_EMISSAO AS EMISSAO, F2.F2_VEND2 AS 'VEND', RTRIM(A3.A3_NREDUZ) AS 'NVEND', CT.CT_VALOR, "
+	cInsert += "                         CASE WHEN (CT_REGIAO = '001') THEN 'CAPITAL' WHEN (CT_REGIAO IN ('009')) THEN 'INTERIOR' WHEN (CT_REGIAO IN ('010')) "
+	cInsert += "                         THEN 'SC' WHEN (CT_REGIAO IN ('011')) THEN 'Televendas'"
+	cInsert += "						 WHEN (CT_REGIAO IN ('013')) THEN 'ZZ-AREA_TEC.'"
+	cInsert += "						  ELSE 'ZZ-OUTRA' END AS REGIAO,"
+	cInsert += "                             (SELECT     " + ValToSql(::nTotalDiasUteisMes) + "	 AS Expr1) AS TOTAL_DIAS,"
+	cInsert += "							(SELECT      " + ValToSql(::nTotalDiasUteisDecorridos) + " AS Expr1) AS TOTAL_PASSADO,"
+	cInsert += "							ISNULL"
+	cInsert += "                             ((SELECT        SUM(dbo.SD2010.D2_QUANT * dbo.SD2010.D2_PRCVEN) AS Expr1"
+	cInsert += "                                 FROM            dbo.SD2010 INNER JOIN"
+	cInsert += "                                                          dbo.SF2010 AS F3 ON F3.F2_FILIAL = dbo.SD2010.D2_FILIAL AND F3.F2_DOC = dbo.SD2010.D2_DOC AND "
+	cInsert += "                                                          F3.F2_SERIE = dbo.SD2010.D2_SERIE AND F3.F2_EMISSAO = F2.F2_EMISSAO AND F3.F2_TIPO = 'N' AND "
+	cInsert += "                                                          F3.F2_DUPL <> ' ' AND F3.D_E_L_E_T_ <> '*' AND F3.F2_VEND2 = F2.F2_VEND2 INNER JOIN"
+	cInsert += "                                                          dbo.SB1010 ON dbo.SB1010.B1_FILIAL = ' ' AND dbo.SB1010.B1_COD = dbo.SD2010.D2_COD AND dbo.SB1010.D_E_L_E_T_ = ' ' AND "
+	cInsert += "                                                          dbo.SB1010.B1_GRUPO <> '0600'"
+	cInsert += "                                 WHERE        (dbo.SD2010.D2_EMISSAO = F2.F2_EMISSAO)), 0) AS 'PRCVEN', ISNULL"
+	cInsert += "                             ((SELECT        SUM(SD2010_2.D2_QUANT * SD2010_2.D2_PRCVEN) AS Expr1"
+	cInsert += "                                 FROM            dbo.SD2010 AS SD2010_2 INNER JOIN"
+	cInsert += "                                                          dbo.SF2010 AS F3 ON F3.F2_FILIAL = SD2010_2.D2_FILIAL AND F3.F2_DOC = SD2010_2.D2_DOC AND "
+	cInsert += "                                                          F3.F2_SERIE = SD2010_2.D2_SERIE AND F3.F2_EMISSAO = F2.F2_EMISSAO AND F3.F2_TIPO = 'N' AND "
+	cInsert += "                                                          F3.F2_DUPL <> ' ' AND F3.D_E_L_E_T_ <> '*' AND F3.F2_VEND2 = F2.F2_VEND2 INNER JOIN"
+	cInsert += "                                                          dbo.SB1010 AS SB1010_5 ON SB1010_5.B1_FILIAL = ' ' AND SB1010_5.B1_COD = SD2010_2.D2_COD AND SB1010_5.D_E_L_E_T_ = ' ' AND "
+	cInsert += "                                                          SB1010_5.B1_GRUPO = '0600'"
+	cInsert += "                                 WHERE        (SD2010_2.D2_EMISSAO = F2.F2_EMISSAO)), 0) AS 'MAQUINAS', ISNULL"
+	cInsert += "                             ((SELECT        SUM(SD2010_1.D2_QUANT * SD2010_1.D2_PRCVEN) AS Expr1"
+	cInsert += "                                 FROM            dbo.SD2010 AS SD2010_1 INNER JOIN"
+	cInsert += "                                                          dbo.SF2010 AS F3 ON F3.F2_FILIAL = SD2010_1.D2_FILIAL AND F3.F2_DOC = SD2010_1.D2_DOC AND "
+	cInsert += "                                                          F3.F2_SERIE = SD2010_1.D2_SERIE AND F3.F2_EMISSAO = F2.F2_EMISSAO AND F3.F2_TIPO = 'N' AND "
+	cInsert += "                                                          F3.F2_DUPL <> ' ' AND F3.D_E_L_E_T_ <> '*' AND F3.F2_VEND2 = F2.F2_VEND2 INNER JOIN"
+	cInsert += "                                                          dbo.SB1010 AS SB1010_4 ON SB1010_4.B1_FILIAL = ' ' AND SB1010_4.B1_COD = SD2010_1.D2_COD AND SB1010_4.D_E_L_E_T_ = ' ' AND "
+	cInsert += "                                                          SB1010_4.B1_PROC = '000014'"
+	cInsert += "                                 WHERE        (SD2010_1.D2_EMISSAO = F2.F2_EMISSAO)), 0) AS 'ECOLAB',ISNULL"
+	cInsert += "                             ((SELECT        SUM(SD2010_1.D2_QUANT * SD2010_1.D2_PRCVEN) AS Expr1"
+	cInsert += "                                 FROM            dbo.SD2010 AS SD2010_1 INNER JOIN"
+	cInsert += "                                                          dbo.SF2010 AS F3 ON F3.F2_FILIAL = SD2010_1.D2_FILIAL AND F3.F2_DOC = SD2010_1.D2_DOC AND "
+	cInsert += "                                                          F3.F2_SERIE = SD2010_1.D2_SERIE AND F3.F2_EMISSAO = F2.F2_EMISSAO AND F3.F2_TIPO = 'N' AND "
+	cInsert += "                                                          F3.F2_DUPL <> ' ' AND F3.D_E_L_E_T_ <> '*' AND F3.F2_VEND2 = F2.F2_VEND2 INNER JOIN"
+	cInsert += "                                                          dbo.SB1010 AS SB1010_4 ON SB1010_4.B1_FILIAL = ' ' AND SB1010_4.B1_COD = SD2010_1.D2_COD AND SB1010_4.D_E_L_E_T_ = ' ' AND "
+	cInsert += "                                                          SB1010_4.B1_PROC  IN('000083','000242')"
+	cInsert += "                                 WHERE        (SD2010_1.D2_EMISSAO = F2.F2_EMISSAO)), 0) AS 'RUBBERMAID', ISNULL"
+	cInsert += "								((SELECT        SUM(SD2010_1.D2_QUANT * SD2010_1.D2_PRCVEN) AS Expr1"
+	cInsert += "												 FROM            dbo.SD2010 AS SD2010_1 INNER JOIN"
+	cInsert += "															dbo.SF2010 AS F3 ON F3.F2_FILIAL = SD2010_1.D2_FILIAL AND F3.F2_DOC = SD2010_1.D2_DOC AND "
+	cInsert += "															F3.F2_SERIE = SD2010_1.D2_SERIE AND F3.F2_EMISSAO = F2.F2_EMISSAO AND F3.F2_TIPO = 'N' AND "
+	cInsert += "															F3.F2_DUPL <> ' ' AND F3.D_E_L_E_T_ <> '*' AND F3.F2_VEND2 = F2.F2_VEND2  INNER JOIN"
+	cInsert += "															dbo.SB1010 AS SB1010_4 ON SB1010_4.B1_FILIAL = ' ' AND SB1010_4.B1_COD = SD2010_1.D2_COD AND SB1010_4.D_E_L_E_T_ = ' ' AND "
+	cInsert += "															SB1010_4.B1_GRUPO = '1003'"
+	cInsert += "												 WHERE        (SD2010_1.D2_EMISSAO = F2.F2_EMISSAO)), 0)AS 'LAVAZZA' , ISNULL"
+	cInsert += "                             ((SELECT        SUM(dbo.SD1010.D1_QUANT * dbo.SD1010.D1_VUNIT -  dbo.SD1010.D1_VALDESC) AS Expr1"
+	cInsert += "                                 FROM            dbo.SD1010 INNER JOIN"
+	cInsert += "                                                          dbo.SF2010 AS F1 ON F1.F2_FILIAL = dbo.SD1010.D1_FILIAL AND F1.F2_DOC = dbo.SD1010.D1_NFORI AND "
+	cInsert += "                                                          F1.F2_SERIE = dbo.SD1010.D1_SERIORI AND "
+	cInsert += "                                                          F1.F2_TIPO = 'N' AND F1.F2_DUPL <> ' ' AND F1.D_E_L_E_T_ <> '*' AND F1.F2_VEND2 = F2.F2_VEND2 INNER JOIN"
+	cInsert += "                                                          dbo.SB1010 AS SB1010_3 ON SB1010_3.B1_FILIAL = ' ' AND SB1010_3.B1_COD = dbo.SD1010.D1_COD AND "
+	cInsert += "                                                          SB1010_3.D_E_L_E_T_ = ' ' AND SB1010_3.B1_GRUPO <> '0600'"
+	cInsert += "                                 WHERE        (dbo.SD1010.D1_EMISSAO = F2.F2_EMISSAO) AND (dbo.SD1010.D1_TIPO = 'D') AND "
+	cInsert += "                                                          (dbo.SD1010.D1_CF <> '1908') AND (dbo.SD1010.D1_CF <> '1909') AND (dbo.SD1010.D1_CF <> '1912') AND (dbo.SD1010.D1_CF <> '1913') AND (dbo.SD1010.D_E_L_E_T_= ' ') "
+	cInsert += "                                                          AND (F1.D_E_L_E_T_ = ' ')), 0) AS 'DPRCVEN', ISNULL"
+	cInsert += "                             ((SELECT        SUM(SD1010_2.D1_QUANT * SD1010_2.D1_VUNIT - SD1010_2.D1_VALDESC) AS Expr1"
+	cInsert += "                                 FROM            dbo.SD1010 AS SD1010_2 INNER JOIN"
+	cInsert += "                                                          dbo.SF2010 AS F1 ON F1.F2_FILIAL = SD1010_2.D1_FILIAL AND F1.F2_DOC = SD1010_2.D1_NFORI AND "
+	cInsert += "                                                          F1.F2_SERIE = SD1010_2.D1_SERIORI  AND F1.F2_TIPO = 'N' AND"
+	cInsert += "                                                           F1.F2_DUPL <> ' ' AND F1.D_E_L_E_T_ <> '*' AND F1.F2_VEND2 = F2.F2_VEND2 INNER JOIN"
+	cInsert += "                                                          dbo.SB1010 AS SB1010_2 ON SB1010_2.B1_FILIAL = ' ' AND SB1010_2.B1_COD = SD1010_2.D1_COD AND SB1010_2.D_E_L_E_T_ = ' ' AND "
+	cInsert += "                                                          SB1010_2.B1_GRUPO = '0600'"
+	cInsert += "                                 WHERE        (SD1010_2.D1_EMISSAO = F2.F2_EMISSAO) AND (SD1010_2.D1_TIPO = 'D') AND "
+	cInsert += "                                                          (SD1010_2.D1_CF <> '1908') AND (SD1010_2.D1_CF <> '1909') AND (SD1010_2.D1_CF <> '1912') AND (SD1010_2.D1_CF <> '1913') AND "
+	cInsert += "                                                          (F1.D_E_L_E_T_ = ' ')), 0) AS 'DMAQUINAS',"
+	cInsert += "					 ISNULL ((SELECT        SUM(SD1010_1.D1_QUANT * SD1010_1.D1_VUNIT - SD1010_1.D1_VALDESC) AS Expr1"
+	cInsert += "                                 FROM            dbo.SD1010 AS SD1010_1 INNER JOIN"
+	cInsert += "                                                          dbo.SF2010 AS F1 ON F1.F2_FILIAL = SD1010_1.D1_FILIAL AND F1.F2_DOC = SD1010_1.D1_NFORI AND "
+	cInsert += "                                                          F1.F2_SERIE = SD1010_1.D1_SERIORI  AND F1.F2_TIPO = 'N' AND"
+	cInsert += "                                                           F1.F2_DUPL <> ' ' AND F1.D_E_L_E_T_ <> '*' AND F1.F2_VEND2 = F2.F2_VEND2 INNER JOIN"
+	cInsert += "                                                          dbo.SB1010 AS SB1010_1 ON SB1010_1.B1_FILIAL = ' ' AND SB1010_1.B1_COD = SD1010_1.D1_COD AND SB1010_1.D_E_L_E_T_ = ' ' AND "
+	cInsert += "                                                          SB1010_1.B1_PROC = '000014'"
+	cInsert += "                                 WHERE        (SD1010_1.D1_EMISSAO = F2.F2_EMISSAO) AND (SD1010_1.D1_TIPO = 'D') AND "
+	cInsert += "                                                          (SD1010_1.D1_CF <> '1908') AND (SD1010_1.D1_CF <> '1909') AND (SD1010_1.D1_CF <> '1912') AND (SD1010_1.D1_CF <> '1913') AND "
+	cInsert += "                                                          (F1.D_E_L_E_T_ = ' ')), 0) AS 'DECOLAB', ISNULL"
+	cInsert += "                             ((SELECT        SUM(SD1010_1.D1_QUANT * SD1010_1.D1_VUNIT - SD1010_1.D1_VALDESC) AS Expr1"
+	cInsert += "                                 FROM            dbo.SD1010 AS SD1010_1 INNER JOIN"
+	cInsert += "                                                          dbo.SF2010 AS F1 ON F1.F2_FILIAL = SD1010_1.D1_FILIAL AND F1.F2_DOC = SD1010_1.D1_NFORI AND "
+	cInsert += "                                                          F1.F2_SERIE = SD1010_1.D1_SERIORI  AND F1.F2_TIPO = 'N' AND"
+	cInsert += "                                                           F1.F2_DUPL <> ' ' AND F1.D_E_L_E_T_ <> '*' AND F1.F2_VEND2 = F2.F2_VEND2 INNER JOIN"
+	cInsert += "                                                          dbo.SB1010 AS SB1010_1 ON SB1010_1.B1_FILIAL = ' ' AND SB1010_1.B1_COD = SD1010_1.D1_COD AND SB1010_1.D_E_L_E_T_ = ' ' AND "
+	cInsert += "                                                          SB1010_1.B1_PROC IN('000083','000242')"
+	cInsert += "                                 WHERE        (SD1010_1.D1_EMISSAO = F2.F2_EMISSAO) AND (SD1010_1.D1_TIPO = 'D') AND "
+	cInsert += "                                                          (SD1010_1.D1_CF <> '1908') AND (SD1010_1.D1_CF <> '1909') AND (SD1010_1.D1_CF <> '1912') AND (SD1010_1.D1_CF <> '1913') AND "
+	cInsert += "                                                          (F1.D_E_L_E_T_ = ' ')), 0) AS 'DRUBBERMAID',ISNULL"
+	cInsert += "                             ((SELECT        SUM(SD1010_2.D1_QUANT * SD1010_2.D1_VUNIT - SD1010_2.D1_VALDESC) AS Expr1"
+	cInsert += "                                 FROM            dbo.SD1010 AS SD1010_2 INNER JOIN"
+	cInsert += "                                                          dbo.SF2010 AS F1 ON F1.F2_FILIAL = SD1010_2.D1_FILIAL AND F1.F2_DOC = SD1010_2.D1_NFORI AND "
+	cInsert += "                                                          F1.F2_SERIE = SD1010_2.D1_SERIORI   AND F1.F2_TIPO = 'N' AND"
+	cInsert += "                                                           F1.F2_DUPL <> ' ' AND F1.D_E_L_E_T_ <> '*' AND F1.F2_VEND2 = F2.F2_VEND2 INNER JOIN"
+	cInsert += "                                                          dbo.SB1010 AS SB1010_2 ON SB1010_2.B1_FILIAL = ' ' AND SB1010_2.B1_COD = SD1010_2.D1_COD AND SB1010_2.D_E_L_E_T_ = ' ' AND "
+	cInsert += "                                                          SB1010_2.B1_GRUPO = '1003'"
+	cInsert += "                                 WHERE        (SD1010_2.D1_EMISSAO = F2.F2_EMISSAO) AND (SD1010_2.D1_TIPO = 'D') AND "
+	cInsert += "                                                          (SD1010_2.D1_CF <> '1908') AND (SD1010_2.D1_CF <> '1909') AND (SD1010_2.D1_CF <> '1912') AND (SD1010_2.D1_CF <> '1913') AND "
+	cInsert += "                                                          (F1.D_E_L_E_T_ = ' ')), 0) AS 'DLAVAZZA',"
+	cInsert += ""
+	cInsert += "				(SELECT count( distinct(UA_CLIENTE+UA_LOJA)  )  FROM SUA010 "
+	cInsert += "					INNER JOIN dbo.SF2010 AS F3 "
+	cInsert += "						ON F3.F2_FILIAL = dbo.SUA010.UA_FILIAL AND F3.F2_DOC = dbo.SUA010.UA_DOC AND "
+	cInsert += "						F3.F2_SERIE = dbo.SUA010.UA_SERIE AND F3.F2_EMISSAO = dbo.SUA010.UA_EMISNF AND F3.F2_TIPO = 'N' AND "
+	cInsert += "						F3.F2_DUPL <> ' ' AND F3.D_E_L_E_T_ = ' '"
+	cInsert += "					WHERE  "
+	cInsert += "					(UA_EMISNF = F2.F2_EMISSAO)AND UA_VEND2 = F2.F2_VEND2  AND UA_CODLIG ='000019' AND SUA010.D_E_L_E_T_ =' ') AS CLI_NOVO,"
+	cInsert += "				(SELECT count( distinct(UA_CLIENTE+UA_LOJA)  )  FROM SUA010 "
+	cInsert += "					INNER JOIN dbo.SF2010 AS F3 "
+	cInsert += "						ON F3.F2_FILIAL = dbo.SUA010.UA_FILIAL AND F3.F2_DOC = dbo.SUA010.UA_DOC AND "
+	cInsert += "						F3.F2_SERIE = dbo.SUA010.UA_SERIE AND F3.F2_EMISSAO = dbo.SUA010.UA_EMISNF AND F3.F2_TIPO = 'N' AND "
+	cInsert += "						F3.F2_DUPL <> ' ' AND F3.D_E_L_E_T_ = ' '"
+	cInsert += "					WHERE "
+	cInsert += "					(UA_EMISNF = F2.F2_EMISSAO)AND UA_VEND2 = F2.F2_VEND2   AND UA_CODLIG ='000020' AND SUA010.D_E_L_E_T_ =' ') AS CLI_REATIVO,"
+	cInsert += "				(SELECT count( distinct(UA_CLIENTE+UA_LOJA)  )  FROM SUA010 "
+	cInsert += "					INNER JOIN dbo.SF2010 AS F3 "
+	cInsert += "						ON F3.F2_FILIAL = dbo.SUA010.UA_FILIAL AND F3.F2_DOC = dbo.SUA010.UA_DOC AND "
+	cInsert += "						F3.F2_SERIE = dbo.SUA010.UA_SERIE AND F3.F2_EMISSAO = dbo.SUA010.UA_EMISNF AND F3.F2_TIPO = 'N' AND "
+	cInsert += "						F3.F2_DUPL <> ' ' AND F3.D_E_L_E_T_ = ' '"
+	cInsert += "					WHERE  "
+	cInsert += "					(UA_EMISNF = F2.F2_EMISSAO) AND UA_VEND2 = F2.F2_VEND2  AND UA_CODLIG ='000086' AND SUA010.D_E_L_E_T_ =' ') AS CLI_MIX,   "
+	cInsert += "   ISNULL((SELECT  SUM(D5.D2_QUANT) "
+	cInsert += "		FROM  dbo.SD2010 AS D5 "
+	cInsert += "		INNER JOIN SF4010 F4 ON F4_FILIAL = SUBSTRING( D5.D2_FILIAL,1,4) "
+	cInsert += "			AND F4_CODIGO = D5.D2_TES "
+	cInsert += "			AND F4_DUPLIC  ='S' "
+	cInsert += "			and F4.D_E_L_E_T_ = ' ' "
+	cInsert += "		INNER JOIN dbo.SB1010 AS B1 ON B1.B1_FILIAL = ' ' "
+	cInsert += "			AND B1.B1_COD = D5.D2_COD AND B1.D_E_L_E_T_ = ' ' "
+	cInsert += "			AND B1.B1_GRUPO = '0600'"
+	cInsert += "		INNER JOIN  dbo.SF2010 AS F3 ON F3.F2_FILIAL = D5.D2_FILIAL "
+	cInsert += "			AND F3.F2_DOC = D5.D2_DOC "
+	cInsert += "			AND F3.F2_SERIE = D5.D2_SERIE "
+	cInsert += "			AND (F3.F2_EMISSAO = F2.F2_EMISSAO)   "
+	cInsert += "			AND F3.F2_TIPO = 'N' "
+	cInsert += "			AND F3.D_E_L_E_T_ <> '*' "
+	cInsert += "			and F3.F2_VEND2 = F2.F2_VEND2"
+	cInsert += "		WHERE   (D5.D2_EMISSAO = F2.F2_EMISSAO)  "
+	cInsert += "			AND D5.D_E_L_E_T_ = ' ') ,0) AS 'QTDMAQ',"
+	cInsert += ""
+	cInsert += "	ISNULL((SELECT  SUM(SD1010_2.D1_QUANT) AS Expr1"
+	cInsert += "            FROM            dbo.SD1010 AS SD1010_2 "
+	cInsert += "			INNER JOIN dbo.SF2010 AS F1 "
+	cInsert += "				ON F1.F2_FILIAL = SD1010_2.D1_FILIAL AND F1.F2_DOC = SD1010_2.D1_NFORI AND "
+	cInsert += "                       F1.F2_SERIE = SD1010_2.D1_SERIORI   AND F1.F2_TIPO = 'N' AND"
+	cInsert += "                       F1.F2_DUPL <> ' ' AND F1.D_E_L_E_T_ <> '*' AND F1.F2_VEND2 = F2.F2_VEND2 "
+	cInsert += "			INNER JOIN dbo.SB1010 AS SB1010_2 "
+	cInsert += "				ON SB1010_2.B1_FILIAL = ' ' AND SB1010_2.B1_COD = SD1010_2.D1_COD AND SB1010_2.D_E_L_E_T_ = ' ' AND "
+	cInsert += "                       SB1010_2.B1_GRUPO = '0600'"
+	cInsert += "            WHERE        (SD1010_2.D1_EMISSAO = F2.F2_EMISSAO) AND (SD1010_2.D1_TIPO = 'D') AND "
+	cInsert += "                 (SD1010_2.D1_CF <> '1908') AND (SD1010_2.D1_CF <> '1909') AND (SD1010_2.D1_CF <> '1912') AND (SD1010_2.D1_CF <> '1913') AND "
+	cInsert += "                 (F1.D_E_L_E_T_ = ' ')), 0) AS 'DQTDMAQ',"
+	cInsert += "	' ',CT_VLECO,CT_VLRUBB,'2'"
+	cInsert += ""
+	cInsert += ""
+	cInsert += "FROM            dbo.SF2010 AS F2 INNER JOIN"
+	cInsert += "                         dbo.SCT010 AS CT ON CT.CT_VEND = F2.F2_VEND2 AND CT.D_E_L_E_T_ = ' ' LEFT OUTER JOIN"
+	cInsert += "                         dbo.SA3010 AS A3 ON A3.A3_COD = F2.F2_VEND2 AND A3.D_E_L_E_T_ = ' ' "
+	cInsert += "WHERE        (F2.F2_EMISSAO  LIKE " + ValToSql(::cAnoMesLike) + " ) AND (F2.F2_TIPO = 'N') AND (F2.F2_DUPL <> ' ') "
+	cInsert += "AND (F2.D_E_L_E_T_ <> '*') AND F2.F2_VEND2 <>' ' "
+	
+	nInsert := TcSqlExec(cInsert)
+
+	If (nInsert < 0)
+		ConOut("LOG DO UPDATE: " + TCSQLError())
+	EndIf
+
+	ConOut("Finalizado: InsertSTXMETA " + "Data " + DTOC(dDatabase) + " - " + TIME())
+
+Return
+
+/*/{Protheus.doc} TSalesTarget::x'SavesReturns
+Grava devoluções em dias que não ocorreram vendas para os vendendores 1 e 2
+@type method
+@version 1.0
+@author Alfred Andersen
+@since 28/06/2023
+@requester Kleber Moro
+@consultancy Harpia
+@site www.harpiaconsultoria.com
+/*/
+Method SavesReturns() Class TSalesTarget
+
+	Local cInsert as Character
+	Local nInsert as Numeric
+
+	cInsert := ""
+	nInsert := 0
+
+	cInsert += "WITH TABELA AS"
+	cInsert += "  (SELECT DISTINCT 'SENTAX' AS GRUPO,"
+	cInsert += "                   SF1.F1_EMISSAO AS EMISSAO,"
+	cInsert += "                   SF2.F2_VEND1 AS VEND,"
+	cInsert += "                   RTRIM(A3.A3_NREDUZ) AS NVEND,"
+	cInsert += "                   CT.CT_VALOR,"
+	cInsert += "                   CASE"
+	cInsert += "                       WHEN (CT_REGIAO = '001') THEN 'CAPITAL'"
+	cInsert += "                       WHEN (CT_REGIAO IN ('009')) THEN 'INTERIOR'"
+	cInsert += "                       WHEN (CT_REGIAO IN ('010')) THEN 'SC'"
+	cInsert += "                       WHEN (CT_REGIAO IN ('011')) THEN 'Televendas'"
+	cInsert += "                       WHEN (CT_REGIAO IN ('013')) THEN 'ZZ-AREA_TEC.'"
+	cInsert += "                       ELSE 'ZZ-OUTRA'"
+	cInsert += "                   END AS REGIAO,"
+	cInsert += ""
+	cInsert += "     (SELECT " + ValToSql(::nTotalDiasUteisMes) + " AS Expr1) AS TOTAL_DIAS,"
+	cInsert += ""
+	cInsert += "     (SELECT " + ValToSql(::nTotalDiasUteisDecorridos) + " AS Expr1) AS TOTAL_PASSADO,"
+	cInsert += "                   0 AS PRCVEN,"
+	cInsert += "                   0 AS MAQUINAS,"
+	cInsert += "                   0 AS ECOLAB,"
+	cInsert += "                   0 AS RUBBERMAID,"
+	cInsert += "                   0 AS LAVAZZA,"
+	cInsert += "                   ISNULL ("
+	cInsert += "                             (SELECT SUM(dbo.SD1010.D1_QUANT * dbo.SD1010.D1_VUNIT - dbo.SD1010.D1_VALDESC) AS Expr1"
+	cInsert += "                              FROM dbo.SD1010"
+	cInsert += "                              INNER JOIN SF2010 AS F2ORI ON F2ORI.F2_FILIAL = dbo.SD1010.D1_FILIAL"
+	cInsert += "                              AND F2ORI.F2_DOC = dbo.SD1010.D1_NFORI"
+	cInsert += "                              AND F2ORI.F2_SERIE = dbo.SD1010.D1_SERIORI"
+	cInsert += "                              AND F2ORI.F2_TIPO = 'N'"
+	cInsert += "                              AND F2ORI.F2_DUPL <> ' '"
+	cInsert += "                              AND F2ORI.D_E_L_E_T_ <> '*'"
+	cInsert += "                              INNER JOIN dbo.SB1010 AS SB1010_3 ON SB1010_3.B1_FILIAL = ' '"
+	cInsert += "                              AND SB1010_3.B1_COD = dbo.SD1010.D1_COD"
+	cInsert += "                              AND SB1010_3.D_E_L_E_T_ = ' '"
+	cInsert += "                              AND SB1010_3.B1_GRUPO <> '0600'"
+	cInsert += "                              WHERE dbo.SD1010.D1_FILIAL = SF1.F1_FILIAL"
+	cInsert += "                                AND dbo.SD1010.D1_SERIE = SF1.F1_SERIE"
+	cInsert += "                                AND dbo.SD1010.D1_DOC = SF1.F1_DOC"
+	cInsert += "                                AND dbo.SD1010.D1_FORNECE = SF1.F1_FORNECE"
+	cInsert += "                                AND dbo.SD1010.D1_LOJA = SF1.F1_LOJA"
+	cInsert += "                                AND (dbo.SD1010.D1_EMISSAO = SF1.F1_EMISSAO)"
+	cInsert += "                                AND (dbo.SD1010.D1_TIPO = 'D')"
+	cInsert += "                                AND (dbo.SD1010.D1_CF <> '1908')"
+	cInsert += "                                AND (dbo.SD1010.D1_CF <> '1909')"
+	cInsert += "                                AND (dbo.SD1010.D1_CF <> '1912')"
+	cInsert += "                                AND (dbo.SD1010.D1_CF <> '1913')"
+	cInsert += "                                AND (dbo.SD1010.D_E_L_E_T_= ' ') ), 0) AS DPRCVEN,"
+	cInsert += "                          ISNULL ("
+	cInsert += "                                    (SELECT SUM(dbo.SD1010.D1_QUANT * dbo.SD1010.D1_VUNIT - dbo.SD1010.D1_VALDESC) AS Expr1"
+	cInsert += "                                     FROM dbo.SD1010"
+	cInsert += "                                     INNER JOIN SF2010 AS F2ORI ON F2ORI.F2_FILIAL = dbo.SD1010.D1_FILIAL"
+	cInsert += "                                     AND F2ORI.F2_DOC = dbo.SD1010.D1_NFORI"
+	cInsert += "                                     AND F2ORI.F2_SERIE = dbo.SD1010.D1_SERIORI"
+	cInsert += "                                     AND F2ORI.F2_TIPO = 'N'"
+	cInsert += "                                     AND F2ORI.F2_DUPL <> ' '"
+	cInsert += "                                     AND F2ORI.D_E_L_E_T_ <> '*'"
+	cInsert += "                                     INNER JOIN dbo.SB1010 AS SB1010_3 ON SB1010_3.B1_FILIAL = ' '"
+	cInsert += "                                     AND SB1010_3.B1_COD = dbo.SD1010.D1_COD"
+	cInsert += "                                     AND SB1010_3.D_E_L_E_T_ = ' '"
+	cInsert += "                                     AND SB1010_3.B1_GRUPO = '0600'"
+	cInsert += "                                     WHERE dbo.SD1010.D1_FILIAL = SF1.F1_FILIAL"
+	cInsert += "                                       AND dbo.SD1010.D1_SERIE = SF1.F1_SERIE"
+	cInsert += "                                       AND dbo.SD1010.D1_DOC = SF1.F1_DOC"
+	cInsert += "                                       AND dbo.SD1010.D1_FORNECE = SF1.F1_FORNECE"
+	cInsert += "                                       AND dbo.SD1010.D1_LOJA = SF1.F1_LOJA"
+	cInsert += "                                       AND (dbo.SD1010.D1_EMISSAO = SF1.F1_EMISSAO)"
+	cInsert += "                                       AND (dbo.SD1010.D1_TIPO = 'D')"
+	cInsert += "                                       AND (dbo.SD1010.D1_CF <> '1908')"
+	cInsert += "                                       AND (dbo.SD1010.D1_CF <> '1909')"
+	cInsert += "                                       AND (dbo.SD1010.D1_CF <> '1912')"
+	cInsert += "                                       AND (dbo.SD1010.D1_CF <> '1913')"
+	cInsert += "                                       AND (dbo.SD1010.D_E_L_E_T_= ' ') ), 0) AS DMAQUINAS,"
+	cInsert += "                                 ISNULL ("
+	cInsert += "                                           (SELECT SUM(dbo.SD1010.D1_QUANT * dbo.SD1010.D1_VUNIT - dbo.SD1010.D1_VALDESC) AS Expr1"
+	cInsert += "                                            FROM dbo.SD1010"
+	cInsert += "                                            INNER JOIN SF2010 AS F2ORI ON F2ORI.F2_FILIAL = dbo.SD1010.D1_FILIAL"
+	cInsert += "                                            AND F2ORI.F2_DOC = dbo.SD1010.D1_NFORI"
+	cInsert += "                                            AND F2ORI.F2_SERIE = dbo.SD1010.D1_SERIORI"
+	cInsert += "                                            AND F2ORI.F2_TIPO = 'N'"
+	cInsert += "                                            AND F2ORI.F2_DUPL <> ' '"
+	cInsert += "                                            AND F2ORI.D_E_L_E_T_ <> '*'"
+	cInsert += "                                            INNER JOIN dbo.SB1010 AS SB1010_3 ON SB1010_3.B1_FILIAL = ' '"
+	cInsert += "                                            AND SB1010_3.B1_COD = dbo.SD1010.D1_COD"
+	cInsert += "                                            AND SB1010_3.D_E_L_E_T_ = ' '"
+	cInsert += "                                            AND SB1010_3.B1_PROC = '000014'"
+	cInsert += "                                            WHERE dbo.SD1010.D1_FILIAL = SF1.F1_FILIAL"
+	cInsert += "                                              AND dbo.SD1010.D1_SERIE = SF1.F1_SERIE"
+	cInsert += "                                              AND dbo.SD1010.D1_DOC = SF1.F1_DOC"
+	cInsert += "                                              AND dbo.SD1010.D1_FORNECE = SF1.F1_FORNECE"
+	cInsert += "                                              AND dbo.SD1010.D1_LOJA = SF1.F1_LOJA"
+	cInsert += "                                              AND (dbo.SD1010.D1_EMISSAO = SF1.F1_EMISSAO)"
+	cInsert += "                                              AND (dbo.SD1010.D1_TIPO = 'D')"
+	cInsert += "                                              AND (dbo.SD1010.D1_CF <> '1908')"
+	cInsert += "                                              AND (dbo.SD1010.D1_CF <> '1909')"
+	cInsert += "                                              AND (dbo.SD1010.D1_CF <> '1912')"
+	cInsert += "                                              AND (dbo.SD1010.D1_CF <> '1913')"
+	cInsert += "                                              AND (dbo.SD1010.D_E_L_E_T_= ' ') ), 0) AS DECOLAB,"
+	cInsert += "                                        ISNULL ("
+	cInsert += "                                                  (SELECT SUM(dbo.SD1010.D1_QUANT * dbo.SD1010.D1_VUNIT - dbo.SD1010.D1_VALDESC) AS Expr1"
+	cInsert += "                                                   FROM dbo.SD1010"
+	cInsert += "                                                   INNER JOIN SF2010 AS F2ORI ON F2ORI.F2_FILIAL = dbo.SD1010.D1_FILIAL"
+	cInsert += "                                                   AND F2ORI.F2_DOC = dbo.SD1010.D1_NFORI"
+	cInsert += "                                                   AND F2ORI.F2_SERIE = dbo.SD1010.D1_SERIORI"
+	cInsert += "                                                   AND F2ORI.F2_TIPO = 'N'"
+	cInsert += "                                                   AND F2ORI.F2_DUPL <> ' '"
+	cInsert += "                                                   AND F2ORI.D_E_L_E_T_ <> '*'"
+	cInsert += "                                                   INNER JOIN dbo.SB1010 AS SB1010_3 ON SB1010_3.B1_FILIAL = ' '"
+	cInsert += "                                                   AND SB1010_3.B1_COD = dbo.SD1010.D1_COD"
+	cInsert += "                                                   AND SB1010_3.D_E_L_E_T_ = ' '"
+	cInsert += "                                                   AND SB1010_3.B1_PROC IN('000083',"
+	cInsert += "                                                                           '000242')"
+	cInsert += "                                                   WHERE dbo.SD1010.D1_FILIAL = SF1.F1_FILIAL"
+	cInsert += "                                                     AND dbo.SD1010.D1_SERIE = SF1.F1_SERIE"
+	cInsert += "                                                     AND dbo.SD1010.D1_DOC = SF1.F1_DOC"
+	cInsert += "                                                     AND dbo.SD1010.D1_FORNECE = SF1.F1_FORNECE"
+	cInsert += "                                                     AND dbo.SD1010.D1_LOJA = SF1.F1_LOJA"
+	cInsert += "                                                     AND (dbo.SD1010.D1_EMISSAO = SF1.F1_EMISSAO)"
+	cInsert += "                                                     AND (dbo.SD1010.D1_TIPO = 'D')"
+	cInsert += "                                                     AND (dbo.SD1010.D1_CF <> '1908')"
+	cInsert += "                                                     AND (dbo.SD1010.D1_CF <> '1909')"
+	cInsert += "                                                     AND (dbo.SD1010.D1_CF <> '1912')"
+	cInsert += "                                                     AND (dbo.SD1010.D1_CF <> '1913')"
+	cInsert += "                                                     AND (dbo.SD1010.D_E_L_E_T_= ' ') ), 0) AS DRUBBERMAID,"
+	cInsert += "                                               ISNULL ("
+	cInsert += "                                                         (SELECT SUM(dbo.SD1010.D1_QUANT * dbo.SD1010.D1_VUNIT - dbo.SD1010.D1_VALDESC) AS Expr1"
+	cInsert += "                                                          FROM dbo.SD1010"
+	cInsert += "                                                          INNER JOIN SF2010 AS F2ORI ON F2ORI.F2_FILIAL = dbo.SD1010.D1_FILIAL"
+	cInsert += "                                                          AND F2ORI.F2_DOC = dbo.SD1010.D1_NFORI"
+	cInsert += "                                                          AND F2ORI.F2_SERIE = dbo.SD1010.D1_SERIORI"
+	cInsert += "                                                          AND F2ORI.F2_TIPO = 'N'"
+	cInsert += "                                                          AND F2ORI.F2_DUPL <> ' '"
+	cInsert += "                                                          AND F2ORI.D_E_L_E_T_ <> '*'"
+	cInsert += "                                                          INNER JOIN dbo.SB1010 AS SB1010_3 ON SB1010_3.B1_FILIAL = ' '"
+	cInsert += "                                                          AND SB1010_3.B1_COD = dbo.SD1010.D1_COD"
+	cInsert += "                                                          AND SB1010_3.D_E_L_E_T_ = ' '"
+	cInsert += "                                                          AND SB1010_3.B1_GRUPO = '1003'"
+	cInsert += "                                                          WHERE dbo.SD1010.D1_FILIAL = SF1.F1_FILIAL"
+	cInsert += "                                                            AND dbo.SD1010.D1_SERIE = SF1.F1_SERIE"
+	cInsert += "                                                            AND dbo.SD1010.D1_DOC = SF1.F1_DOC"
+	cInsert += "                                                            AND dbo.SD1010.D1_FORNECE = SF1.F1_FORNECE"
+	cInsert += "                                                            AND dbo.SD1010.D1_LOJA = SF1.F1_LOJA"
+	cInsert += "                                                            AND (dbo.SD1010.D1_EMISSAO = SF1.F1_EMISSAO)"
+	cInsert += "                                                            AND (dbo.SD1010.D1_TIPO = 'D')"
+	cInsert += "                                                            AND (dbo.SD1010.D1_CF <> '1908')"
+	cInsert += "                                                            AND (dbo.SD1010.D1_CF <> '1909')"
+	cInsert += "                                                            AND (dbo.SD1010.D1_CF <> '1912')"
+	cInsert += "                                                            AND (dbo.SD1010.D1_CF <> '1913')"
+	cInsert += "                                                            AND (dbo.SD1010.D_E_L_E_T_= ' ') ), 0) AS DLAVAZZA,"
+	cInsert += "                                                      0 AS CLI_NOVO,"
+	cInsert += "                                                      0 AS CLI_REATIVO,"
+	cInsert += "                                                      0 AS CLI_MIX,"
+	cInsert += "                                                      0 AS QTDMAQ,"
+	cInsert += "                                                      ISNULL ("
+	cInsert += "                                                                (SELECT SUM(dbo.SD1010.D1_QUANT) AS Expr1"
+	cInsert += "                                                                 FROM dbo.SD1010"
+	cInsert += "                                                                 INNER JOIN SF2010 AS F2ORI ON F2ORI.F2_FILIAL = dbo.SD1010.D1_FILIAL"
+	cInsert += "                                                                 AND F2ORI.F2_DOC = dbo.SD1010.D1_NFORI"
+	cInsert += "                                                                 AND F2ORI.F2_SERIE = dbo.SD1010.D1_SERIORI"
+	cInsert += "                                                                 AND F2ORI.F2_TIPO = 'N'"
+	cInsert += "                                                                 AND F2ORI.F2_DUPL <> ' '"
+	cInsert += "                                                                 AND F2ORI.D_E_L_E_T_ <> '*'"
+	cInsert += "                                                                 INNER JOIN dbo.SB1010 AS SB1010_3 ON SB1010_3.B1_FILIAL = ' '"
+	cInsert += "                                                                 AND SB1010_3.B1_COD = dbo.SD1010.D1_COD"
+	cInsert += "                                                                 AND SB1010_3.D_E_L_E_T_ = ' '"
+	cInsert += "                                                                 AND SB1010_3.B1_GRUPO = '0600'"
+	cInsert += "                                                                 WHERE dbo.SD1010.D1_FILIAL = SF1.F1_FILIAL"
+	cInsert += "                                                                   AND dbo.SD1010.D1_SERIE = SF1.F1_SERIE"
+	cInsert += "                                                                   AND dbo.SD1010.D1_DOC = SF1.F1_DOC"
+	cInsert += "                                                                   AND dbo.SD1010.D1_FORNECE = SF1.F1_FORNECE"
+	cInsert += "                                                                   AND dbo.SD1010.D1_LOJA = SF1.F1_LOJA"
+	cInsert += "                                                                   AND (dbo.SD1010.D1_EMISSAO = SF1.F1_EMISSAO)"
+	cInsert += "                                                                   AND (dbo.SD1010.D1_TIPO = 'D')"
+	cInsert += "                                                                   AND (dbo.SD1010.D1_CF <> '1908')"
+	cInsert += "                                                                   AND (dbo.SD1010.D1_CF <> '1909')"
+	cInsert += "                                                                   AND (dbo.SD1010.D1_CF <> '1912')"
+	cInsert += "                                                                   AND (dbo.SD1010.D1_CF <> '1913')"
+	cInsert += "                                                                   AND (dbo.SD1010.D_E_L_E_T_= ' ') ), 0) AS DQTDMAQ,"
+	cInsert += "                                                             ' 'AS D_E_L_E_T_,"
+	cInsert += "                                                             CT_VLECO,"
+	cInsert += "                                                             CT_VLRUBB,"
+	cInsert += "                                                             '1' AS TIPOVEND"
+	cInsert += ""
+	cInsert += "   FROM SF1010 SF1"
+	cInsert += "   INNER JOIN SD1010 SD1 ON SD1.D1_FILIAL = SF1.F1_FILIAL"
+	cInsert += "   AND SD1.D1_DOC = SF1.F1_DOC"
+	cInsert += "   AND SD1.D1_SERIE = SF1.F1_SERIE"
+	cInsert += "   AND SD1.D1_FORNECE = SF1.F1_FORNECE"
+	cInsert += "   AND SD1.D1_LOJA = SF1.F1_LOJA"
+	cInsert += "   AND (SD1.D1_CF <> '1908')"
+	cInsert += "   AND (SD1.D1_CF <> '1909')"
+	cInsert += "   AND (SD1.D1_CF <> '1912')"
+	cInsert += "   AND (SD1.D1_CF <> '1913')"
+	cInsert += "   AND SD1.D_E_L_E_T_ = ''"
+	cInsert += "   INNER JOIN SF2010 SF2 ON SF2.F2_FILIAL = SD1.D1_FILIAL"
+	cInsert += "   AND SF2.F2_SERIE = SD1.D1_SERIORI"
+	cInsert += "   AND SF2.F2_DOC = SD1.D1_NFORI"
+	cInsert += "   AND (SF2.F2_TIPO = 'N')"
+	cInsert += "   AND (SF2.F2_DUPL <> ' ')"
+	cInsert += "   AND SF2.D_E_L_E_T_ = ''"
+	cInsert += "   INNER JOIN dbo.SCT010 AS CT ON CT.CT_VEND = SF2.F2_VEND1"
+	cInsert += "   AND CT.D_E_L_E_T_ = ' '"
+	cInsert += "   LEFT OUTER JOIN dbo.SA3010 AS A3 ON A3.A3_COD = SF2.F2_VEND1"
+	cInsert += "   AND A3.D_E_L_E_T_ = ' '"
+	cInsert += "   WHERE SF1.F1_EMISSAO LIKE " + ValToSql(::cAnoMesLike) + ""
+	cInsert += "     AND (SF1.F1_TIPO = 'D')"
+	cInsert += "     AND SF1.D_E_L_E_T_ = ''"
+	cInsert += "     AND NOT EXISTS"
+	cInsert += "       (SELECT 1"
+	cInsert += "        FROM STXMETA"
+	cInsert += "        INNER JOIN SD1010 SD1 ON SD1.D1_FILIAL = SF1.F1_FILIAL"
+	cInsert += "        AND SD1.D1_DOC = SF1.F1_DOC"
+	cInsert += "        AND SD1.D1_SERIE = SF1.F1_SERIE"
+	cInsert += "        AND SD1.D1_FORNECE = SF1.F1_FORNECE"
+	cInsert += "        AND SD1.D1_LOJA = SF1.F1_LOJA"
+	cInsert += "        AND SD1.D_E_L_E_T_ = ''"
+	cInsert += "        INNER JOIN SF2010 SF2 ON SF2.F2_FILIAL = SD1.D1_FILIAL"
+	cInsert += "        AND SF2.F2_SERIE = SD1.D1_SERIORI"
+	cInsert += "        AND SF2.F2_DOC = SD1.D1_NFORI"
+	cInsert += "        AND SF2.F2_VEND1 = STXMETA_VEND"
+	cInsert += "        AND (SF2.F2_TIPO = 'N')"
+	cInsert += "        AND (SF2.F2_DUPL <> ' ')"
+	cInsert += "        AND SF2.D_E_L_E_T_ = ''"
+	cInsert += "        WHERE STXMETA_EMISSAO = SF1.F1_EMISSAO"
+	cInsert += "          AND STXMETA_TIPOVEND = '1' )"
+	cInsert += "   UNION "
+	//--Grava devoluções em dias que não ocorreram vendas do vendendor 2
+	//cInsert += "--INSERT INTO #TMPDEV1"
+	cInsert += "SELECT DISTINCT 'SENTAX' AS GRUPO,"
+	cInsert += "                SF1.F1_EMISSAO AS EMISSAO,"
+	cInsert += "                SF2.F2_VEND2 AS VEND,"
+	cInsert += "                RTRIM(A3.A3_NREDUZ) AS NVEND,"
+	cInsert += "                CT.CT_VALOR,"
+	cInsert += "                CASE"
+	cInsert += "                    WHEN (CT_REGIAO = '001') THEN 'CAPITAL'"
+	cInsert += "                    WHEN (CT_REGIAO IN ('009')) THEN 'INTERIOR'"
+	cInsert += "                    WHEN (CT_REGIAO IN ('010')) THEN 'SC'"
+	cInsert += "                    WHEN (CT_REGIAO IN ('011')) THEN 'Televendas'"
+	cInsert += "                    WHEN (CT_REGIAO IN ('013')) THEN 'ZZ-AREA_TEC.'"
+	cInsert += "                    ELSE 'ZZ-OUTRA'"
+	cInsert += "                END AS REGIAO,"
+	cInsert += ""
+	cInsert += "     (SELECT " + ValToSql(::nTotalDiasUteisMes) + " AS Expr1) AS TOTAL_DIAS,"
+	cInsert += ""
+	cInsert += "     (SELECT " + ValToSql(::nTotalDiasUteisDecorridos) + " AS Expr1) AS TOTAL_PASSADO,"
+	cInsert += "                0 AS PRCVEN,"
+	cInsert += "                0 AS MAQUINAS,"
+	cInsert += "                0 AS ECOLAB,"
+	cInsert += "                0 AS RUBBERMAID,"
+	cInsert += "                0 AS LAVAZZA,"
+	cInsert += "                ISNULL ("
+	cInsert += "                          (SELECT SUM(dbo.SD1010.D1_QUANT * dbo.SD1010.D1_VUNIT - dbo.SD1010.D1_VALDESC) AS Expr1"
+	cInsert += "                           FROM dbo.SD1010"
+	cInsert += "                           INNER JOIN SF2010 AS F2ORI ON F2ORI.F2_FILIAL = dbo.SD1010.D1_FILIAL"
+	cInsert += "                           AND F2ORI.F2_DOC = dbo.SD1010.D1_NFORI"
+	cInsert += "                           AND F2ORI.F2_SERIE = dbo.SD1010.D1_SERIORI"
+	cInsert += "                           AND F2ORI.F2_TIPO = 'N'"
+	cInsert += "                           AND F2ORI.F2_DUPL <> ' '"
+	cInsert += "                           AND F2ORI.D_E_L_E_T_ <> '*'"
+	cInsert += "                           INNER JOIN dbo.SB1010 AS SB1010_3 ON SB1010_3.B1_FILIAL = ' '"
+	cInsert += "                           AND SB1010_3.B1_COD = dbo.SD1010.D1_COD"
+	cInsert += "                           AND SB1010_3.D_E_L_E_T_ = ' '"
+	cInsert += "                           AND SB1010_3.B1_GRUPO <> '0600'"
+	cInsert += "                           WHERE dbo.SD1010.D1_FILIAL = SF1.F1_FILIAL"
+	cInsert += "                             AND dbo.SD1010.D1_SERIE = SF1.F1_SERIE"
+	cInsert += "                             AND dbo.SD1010.D1_DOC = SF1.F1_DOC"
+	cInsert += "                             AND dbo.SD1010.D1_FORNECE = SF1.F1_FORNECE"
+	cInsert += "                             AND dbo.SD1010.D1_LOJA = SF1.F1_LOJA"
+	cInsert += "                             AND (dbo.SD1010.D1_EMISSAO = SF1.F1_EMISSAO)"
+	cInsert += "                             AND (dbo.SD1010.D1_TIPO = 'D')"
+	cInsert += "                             AND (dbo.SD1010.D1_CF <> '1908')"
+	cInsert += "                             AND (dbo.SD1010.D1_CF <> '1909')"
+	cInsert += "                             AND (dbo.SD1010.D1_CF <> '1912')"
+	cInsert += "                             AND (dbo.SD1010.D1_CF <> '1913')"
+	cInsert += "                             AND (dbo.SD1010.D_E_L_E_T_= ' ') ), 0) AS DPRCVEN,"
+	cInsert += "                       ISNULL ("
+	cInsert += "                                 (SELECT SUM(dbo.SD1010.D1_QUANT * dbo.SD1010.D1_VUNIT - dbo.SD1010.D1_VALDESC) AS Expr1"
+	cInsert += "                                  FROM dbo.SD1010"
+	cInsert += "                                  INNER JOIN SF2010 AS F2ORI ON F2ORI.F2_FILIAL = dbo.SD1010.D1_FILIAL"
+	cInsert += "                                  AND F2ORI.F2_DOC = dbo.SD1010.D1_NFORI"
+	cInsert += "                                  AND F2ORI.F2_SERIE = dbo.SD1010.D1_SERIORI"
+	cInsert += "                                  AND F2ORI.F2_TIPO = 'N'"
+	cInsert += "                                  AND F2ORI.F2_DUPL <> ' '"
+	cInsert += "                                  AND F2ORI.D_E_L_E_T_ <> '*'"
+	cInsert += "                                  INNER JOIN dbo.SB1010 AS SB1010_3 ON SB1010_3.B1_FILIAL = ' '"
+	cInsert += "                                  AND SB1010_3.B1_COD = dbo.SD1010.D1_COD"
+	cInsert += "                                  AND SB1010_3.D_E_L_E_T_ = ' '"
+	cInsert += "                                  AND SB1010_3.B1_GRUPO = '0600'"
+	cInsert += "                                  WHERE dbo.SD1010.D1_FILIAL = SF1.F1_FILIAL"
+	cInsert += "                                    AND dbo.SD1010.D1_SERIE = SF1.F1_SERIE"
+	cInsert += "                                    AND dbo.SD1010.D1_DOC = SF1.F1_DOC"
+	cInsert += "                                    AND dbo.SD1010.D1_FORNECE = SF1.F1_FORNECE"
+	cInsert += "                                    AND dbo.SD1010.D1_LOJA = SF1.F1_LOJA"
+	cInsert += "                                    AND (dbo.SD1010.D1_EMISSAO = SF1.F1_EMISSAO)"
+	cInsert += "                                    AND (dbo.SD1010.D1_TIPO = 'D')"
+	cInsert += "                                    AND (dbo.SD1010.D1_CF <> '1908')"
+	cInsert += "                                    AND (dbo.SD1010.D1_CF <> '1909')"
+	cInsert += "                                    AND (dbo.SD1010.D1_CF <> '1912')"
+	cInsert += "                                    AND (dbo.SD1010.D1_CF <> '1913')"
+	cInsert += "                                    AND (dbo.SD1010.D_E_L_E_T_= ' ') ), 0) AS DMAQUINAS,"
+	cInsert += "                              ISNULL ("
+	cInsert += "                                        (SELECT SUM(dbo.SD1010.D1_QUANT * dbo.SD1010.D1_VUNIT - dbo.SD1010.D1_VALDESC) AS Expr1"
+	cInsert += "                                         FROM dbo.SD1010"
+	cInsert += "                                         INNER JOIN SF2010 AS F2ORI ON F2ORI.F2_FILIAL = dbo.SD1010.D1_FILIAL"
+	cInsert += "                                         AND F2ORI.F2_DOC = dbo.SD1010.D1_NFORI"
+	cInsert += "                                         AND F2ORI.F2_SERIE = dbo.SD1010.D1_SERIORI"
+	cInsert += "                                         AND F2ORI.F2_TIPO = 'N'"
+	cInsert += "                                         AND F2ORI.F2_DUPL <> ' '"
+	cInsert += "                                         AND F2ORI.D_E_L_E_T_ <> '*'"
+	cInsert += "                                         INNER JOIN dbo.SB1010 AS SB1010_3 ON SB1010_3.B1_FILIAL = ' '"
+	cInsert += "                                         AND SB1010_3.B1_COD = dbo.SD1010.D1_COD"
+	cInsert += "                                         AND SB1010_3.D_E_L_E_T_ = ' '"
+	cInsert += "                                         AND SB1010_3.B1_PROC = '000014'"
+	cInsert += "                                         WHERE dbo.SD1010.D1_FILIAL = SF1.F1_FILIAL"
+	cInsert += "                                           AND dbo.SD1010.D1_SERIE = SF1.F1_SERIE"
+	cInsert += "                                           AND dbo.SD1010.D1_DOC = SF1.F1_DOC"
+	cInsert += "                                           AND dbo.SD1010.D1_FORNECE = SF1.F1_FORNECE"
+	cInsert += "                                           AND dbo.SD1010.D1_LOJA = SF1.F1_LOJA"
+	cInsert += "                                           AND (dbo.SD1010.D1_EMISSAO = SF1.F1_EMISSAO)"
+	cInsert += "                                           AND (dbo.SD1010.D1_TIPO = 'D')"
+	cInsert += "                                           AND (dbo.SD1010.D1_CF <> '1908')"
+	cInsert += "                                           AND (dbo.SD1010.D1_CF <> '1909')"
+	cInsert += "                                           AND (dbo.SD1010.D1_CF <> '1912')"
+	cInsert += "                                           AND (dbo.SD1010.D1_CF <> '1913')"
+	cInsert += "                                           AND (dbo.SD1010.D_E_L_E_T_= ' ') ), 0) AS DECOLAB,"
+	cInsert += "                                     ISNULL ("
+	cInsert += "                                               (SELECT SUM(dbo.SD1010.D1_QUANT * dbo.SD1010.D1_VUNIT - dbo.SD1010.D1_VALDESC) AS Expr1"
+	cInsert += "                                                FROM dbo.SD1010"
+	cInsert += "                                                INNER JOIN SF2010 AS F2ORI ON F2ORI.F2_FILIAL = dbo.SD1010.D1_FILIAL"
+	cInsert += "                                                AND F2ORI.F2_DOC = dbo.SD1010.D1_NFORI"
+	cInsert += "                                                AND F2ORI.F2_SERIE = dbo.SD1010.D1_SERIORI"
+	cInsert += "                                                AND F2ORI.F2_TIPO = 'N'"
+	cInsert += "                                                AND F2ORI.F2_DUPL <> ' '"
+	cInsert += "                                                AND F2ORI.D_E_L_E_T_ <> '*'"
+	cInsert += "                                                INNER JOIN dbo.SB1010 AS SB1010_3 ON SB1010_3.B1_FILIAL = ' '"
+	cInsert += "                                                AND SB1010_3.B1_COD = dbo.SD1010.D1_COD"
+	cInsert += "                                                AND SB1010_3.D_E_L_E_T_ = ' '"
+	cInsert += "                                                AND SB1010_3.B1_PROC IN('000083',"
+	cInsert += "                                                                        '000242')"
+	cInsert += "                                                WHERE dbo.SD1010.D1_FILIAL = SF1.F1_FILIAL"
+	cInsert += "                                                  AND dbo.SD1010.D1_SERIE = SF1.F1_SERIE"
+	cInsert += "                                                  AND dbo.SD1010.D1_DOC = SF1.F1_DOC"
+	cInsert += "                                                  AND dbo.SD1010.D1_FORNECE = SF1.F1_FORNECE"
+	cInsert += "                                                  AND dbo.SD1010.D1_LOJA = SF1.F1_LOJA"
+	cInsert += "                                                  AND (dbo.SD1010.D1_EMISSAO = SF1.F1_EMISSAO)"
+	cInsert += "                                                  AND (dbo.SD1010.D1_TIPO = 'D')"
+	cInsert += "                                                  AND (dbo.SD1010.D1_CF <> '1908')"
+	cInsert += "                                                  AND (dbo.SD1010.D1_CF <> '1909')"
+	cInsert += "                                                  AND (dbo.SD1010.D1_CF <> '1912')"
+	cInsert += "                                                  AND (dbo.SD1010.D1_CF <> '1913')"
+	cInsert += "                                                  AND (dbo.SD1010.D_E_L_E_T_= ' ') ), 0) AS DRUBBERMAID,"
+	cInsert += "                                            ISNULL ("
+	cInsert += "                                                      (SELECT SUM(dbo.SD1010.D1_QUANT * dbo.SD1010.D1_VUNIT - dbo.SD1010.D1_VALDESC) AS Expr1"
+	cInsert += "                                                       FROM dbo.SD1010"
+	cInsert += "                                                       INNER JOIN SF2010 AS F2ORI ON F2ORI.F2_FILIAL = dbo.SD1010.D1_FILIAL"
+	cInsert += "                                                       AND F2ORI.F2_DOC = dbo.SD1010.D1_NFORI"
+	cInsert += "                                                       AND F2ORI.F2_SERIE = dbo.SD1010.D1_SERIORI"
+	cInsert += "                                                       AND F2ORI.F2_TIPO = 'N'"
+	cInsert += "                                                       AND F2ORI.F2_DUPL <> ' '"
+	cInsert += "                                                       AND F2ORI.D_E_L_E_T_ <> '*'"
+	cInsert += "                                                       INNER JOIN dbo.SB1010 AS SB1010_3 ON SB1010_3.B1_FILIAL = ' '"
+	cInsert += "                                                       AND SB1010_3.B1_COD = dbo.SD1010.D1_COD"
+	cInsert += "                                                       AND SB1010_3.D_E_L_E_T_ = ' '"
+	cInsert += "                                                       AND SB1010_3.B1_GRUPO = '1003'"
+	cInsert += "                                                       WHERE dbo.SD1010.D1_FILIAL = SF1.F1_FILIAL"
+	cInsert += "                                                         AND dbo.SD1010.D1_SERIE = SF1.F1_SERIE"
+	cInsert += "                                                         AND dbo.SD1010.D1_DOC = SF1.F1_DOC"
+	cInsert += "                                                         AND dbo.SD1010.D1_FORNECE = SF1.F1_FORNECE"
+	cInsert += "                                                         AND dbo.SD1010.D1_LOJA = SF1.F1_LOJA"
+	cInsert += "                                                         AND (dbo.SD1010.D1_EMISSAO = SF1.F1_EMISSAO)"
+	cInsert += "                                                         AND (dbo.SD1010.D1_TIPO = 'D')"
+	cInsert += "                                                         AND (dbo.SD1010.D1_CF <> '1908')"
+	cInsert += "                                                         AND (dbo.SD1010.D1_CF <> '1909')"
+	cInsert += "                                                         AND (dbo.SD1010.D1_CF <> '1912')"
+	cInsert += "                                                         AND (dbo.SD1010.D1_CF <> '1913')"
+	cInsert += "                                                         AND (dbo.SD1010.D_E_L_E_T_= ' ') ), 0) AS DLAVAZZA,"
+	cInsert += "                                                   0 AS CLI_NOVO,"
+	cInsert += "                                                   0 AS CLI_REATIVO,"
+	cInsert += "                                                   0 AS CLI_MIX,"
+	cInsert += "                                                   0 AS QTDMAQ,"
+	cInsert += "                                                   ISNULL ("
+	cInsert += "                                                             (SELECT SUM(dbo.SD1010.D1_QUANT) AS Expr1"
+	cInsert += "                                                              FROM dbo.SD1010"
+	cInsert += "                                                              INNER JOIN SF2010 AS F2ORI ON F2ORI.F2_FILIAL = dbo.SD1010.D1_FILIAL"
+	cInsert += "                                                              AND F2ORI.F2_DOC = dbo.SD1010.D1_NFORI"
+	cInsert += "                                                              AND F2ORI.F2_SERIE = dbo.SD1010.D1_SERIORI"
+	cInsert += "                                                              AND F2ORI.F2_TIPO = 'N'"
+	cInsert += "                                                              AND F2ORI.F2_DUPL <> ' '"
+	cInsert += "                                                              AND F2ORI.D_E_L_E_T_ <> '*'"
+	cInsert += "                                                              INNER JOIN dbo.SB1010 AS SB1010_3 ON SB1010_3.B1_FILIAL = ' '"
+	cInsert += "                                                              AND SB1010_3.B1_COD = dbo.SD1010.D1_COD"
+	cInsert += "                                                              AND SB1010_3.D_E_L_E_T_ = ' '"
+	cInsert += "                                                              AND SB1010_3.B1_GRUPO = '0600'"
+	cInsert += "                                                              WHERE dbo.SD1010.D1_FILIAL = SF1.F1_FILIAL"
+	cInsert += "                                                                AND dbo.SD1010.D1_SERIE = SF1.F1_SERIE"
+	cInsert += "                                                                AND dbo.SD1010.D1_DOC = SF1.F1_DOC"
+	cInsert += "                                                                AND dbo.SD1010.D1_FORNECE = SF1.F1_FORNECE"
+	cInsert += "                                                                AND dbo.SD1010.D1_LOJA = SF1.F1_LOJA"
+	cInsert += "                                                                AND (dbo.SD1010.D1_EMISSAO = SF1.F1_EMISSAO)"
+	cInsert += "                                                                AND (dbo.SD1010.D1_TIPO = 'D')"
+	cInsert += "                                                                AND (dbo.SD1010.D1_CF <> '1908')"
+	cInsert += "                                                                AND (dbo.SD1010.D1_CF <> '1909')"
+	cInsert += "                                                                AND (dbo.SD1010.D1_CF <> '1912')"
+	cInsert += "                                                                AND (dbo.SD1010.D1_CF <> '1913')"
+	cInsert += "                                                                AND (dbo.SD1010.D_E_L_E_T_= ' ') ), 0) AS DQTDMAQ,"
+	cInsert += "                                                          ' 'AS D_E_L_E_T_,"
+	cInsert += "                                                          CT_VLECO,"
+	cInsert += "                                                          CT_VLRUBB,"
+	cInsert += "                                                          '2' AS TIPOVEND"
+	cInsert += "   FROM SF1010 SF1"
+	cInsert += "   INNER JOIN SD1010 SD1 ON SD1.D1_FILIAL = SF1.F1_FILIAL"
+	cInsert += "   AND SD1.D1_DOC = SF1.F1_DOC"
+	cInsert += "   AND SD1.D1_SERIE = SF1.F1_SERIE"
+	cInsert += "   AND SD1.D1_FORNECE = SF1.F1_FORNECE"
+	cInsert += "   AND SD1.D1_LOJA = SF1.F1_LOJA"
+	cInsert += "   AND (SD1.D1_CF <> '1908')"
+	cInsert += "   AND (SD1.D1_CF <> '1909')"
+	cInsert += "   AND (SD1.D1_CF <> '1912')"
+	cInsert += "   AND (SD1.D1_CF <> '1913')"
+	cInsert += "   AND SD1.D_E_L_E_T_ = ''"
+	cInsert += "   INNER JOIN SF2010 SF2 ON SF2.F2_FILIAL = SD1.D1_FILIAL"
+	cInsert += "   AND SF2.F2_SERIE = SD1.D1_SERIORI"
+	cInsert += "   AND SF2.F2_DOC = SD1.D1_NFORI"
+	cInsert += "   AND (SF2.F2_TIPO = 'N')"
+	cInsert += "   AND (SF2.F2_DUPL <> ' ')"
+	cInsert += "   AND SF2.D_E_L_E_T_ = ''"
+	cInsert += "   INNER JOIN dbo.SCT010 AS CT ON CT.CT_VEND = SF2.F2_VEND2"
+	cInsert += "   AND CT.D_E_L_E_T_ = ' '"
+	cInsert += "   LEFT OUTER JOIN dbo.SA3010 AS A3 ON A3.A3_COD = SF2.F2_VEND2"
+	cInsert += "   AND A3.D_E_L_E_T_ = ' '"
+	cInsert += "   WHERE SF1.F1_EMISSAO LIKE " + ValToSql(::cAnoMesLike) + ""
+	cInsert += "     AND (SF1.F1_TIPO = 'D')"
+	cInsert += "     AND SF1.D_E_L_E_T_ = ''"
+	cInsert += "     AND NOT EXISTS"
+	cInsert += "       (SELECT 1"
+	cInsert += "        FROM STXMETA"
+	cInsert += "        INNER JOIN SD1010 SD1 ON SD1.D1_FILIAL = SF1.F1_FILIAL"
+	cInsert += "        AND SD1.D1_DOC = SF1.F1_DOC"
+	cInsert += "        AND SD1.D1_SERIE = SF1.F1_SERIE"
+	cInsert += "        AND SD1.D1_FORNECE = SF1.F1_FORNECE"
+	cInsert += "        AND SD1.D1_LOJA = SF1.F1_LOJA"
+	cInsert += "        AND SD1.D_E_L_E_T_ = ''"
+	cInsert += "        INNER JOIN SF2010 SF2 ON SF2.F2_FILIAL = SD1.D1_FILIAL"
+	cInsert += "        AND SF2.F2_SERIE = SD1.D1_SERIORI"
+	cInsert += "        AND SF2.F2_DOC = SD1.D1_NFORI"
+	cInsert += "        AND SF2.F2_VEND2 = STXMETA_VEND"
+	cInsert += "        AND (SF2.F2_TIPO = 'N')"
+	cInsert += "        AND (SF2.F2_DUPL <> ' ')"
+	cInsert += "        AND SF2.D_E_L_E_T_ = ''"
+	cInsert += "        WHERE STXMETA_EMISSAO = SF1.F1_EMISSAO"
+	cInsert += "          AND STXMETA_TIPOVEND = '2' ) )"
+	cInsert += "INSERT INTO STXMETA ([STXMETA_FILIAL] , "
+	cInsert += "					[STXMETA_EMISSAO] , "
+	cInsert += "					[STXMETA_VEND] , "
+	cInsert += "					[STXMETA_NREDUZ] , "
+	cInsert += "					[STXMETA_META] , "
+	cInsert += "					[STXMETA_REGIAL] , "
+	cInsert += "					[STXMETA_TDIAS] , "
+	cInsert += "					[STXMETA_TDIASP] , "
+	cInsert += "					[STXMETA_PRCVEN] , "
+	cInsert += "					[STXMETA_MAQUINA] , "
+	cInsert += "					[STXMETA_ECOLAB] , "
+	cInsert += "					[STXMETA_RUBBERMAID] , "
+	cInsert += "					[STXMETA_VLAVAZZA] , "
+	cInsert += "					[STXMETA_DPRCVEN] , "
+	cInsert += "					[STXMETA_DMAQUINA] , "
+	cInsert += "					[STXMETA_DECOLAB] , "
+	cInsert += "					[STXMETA_DRUBBERMAID] , "
+	cInsert += "					[STXMETA_DLAVAZZA] , "
+	cInsert += "					[STXMETA_CNOVO] , "
+	cInsert += "					[STXMETA_CREATIVO] , "
+	cInsert += "					[STXMETA_CMIX] , "
+	cInsert += "					[STXMETA_QTDMAQ] , "
+	cInsert += "					[STXMETA_DQTDMAQ] , "
+	cInsert += "					[D_E_L_E_T_] , "
+	cInsert += "					[STXMETA_VLECO] , "
+	cInsert += "					[STXMETA_VLRUBB] , "
+	cInsert += "					[STXMETA_TIPOVEND])"
+	cInsert += "SELECT GRUPO,"
+	cInsert += "       EMISSAO,"
+	cInsert += "       VEND,"
+	cInsert += "       NVEND,"
+	cInsert += "       CT_VALOR,"
+	cInsert += "       REGIAO,"
+	cInsert += "       TOTAL_DIAS,"
+	cInsert += "       TOTAL_PASSADO,"
+	cInsert += "       SUM(PRCVEN),"
+	cInsert += "       SUM(MAQUINAS),"
+	cInsert += "       SUM(ECOLAB),"
+	cInsert += "       SUM(RUBBERMAID),"
+	cInsert += "       SUM(LAVAZZA),"
+	cInsert += "       SUM(DPRCVEN),"
+	cInsert += "       SUM(DMAQUINAS),"
+	cInsert += "       SUM(DECOLAB),"
+	cInsert += "       SUM(DRUBBERMAID),"
+	cInsert += "       SUM(DLAVAZZA),"
+	cInsert += "       SUM(CLI_NOVO),"
+	cInsert += "       SUM(CLI_REATIVO),"
+	cInsert += "       SUM(CLI_MIX),"
+	cInsert += "       SUM(QTDMAQ),"
+	cInsert += "       SUM(DQTDMAQ),"
+	cInsert += "       D_E_L_E_T_,"
+	cInsert += "       CT_VLECO,"
+	cInsert += "       CT_VLRUBB,"
+	cInsert += "       TIPOVEND"
+	cInsert += " FROM TABELA "
+	cInsert += " GROUP BY GRUPO,"
+	cInsert += "         EMISSAO,"
+	cInsert += "         VEND,"
+	cInsert += "         NVEND,"
+	cInsert += "         CT_VALOR,"
+	cInsert += "         REGIAO,"
+	cInsert += "         TOTAL_DIAS,"
+	cInsert += "         TOTAL_PASSADO,"
+	cInsert += "         D_E_L_E_T_,"
+	cInsert += "         CT_VLECO,"
+	cInsert += "         CT_VLRUBB,"
+	cInsert += "         TIPOVEND"
+
+	nInsert := TcSqlExec(cInsert)
+
+	If (nInsert < 0)
+		ConOut("LOG DO UPDATE: " + TCSQLError())
+	EndIf
+
+	ConOut("Finalizado: SavesReturns " + "Data " + DTOC(dDatabase) + " - " + TIME())
+
+Return
+
+/*/{Protheus.doc} TSalesTarget::InsertMETAVEND
+Insere o valor atual da meta do vendedor caso ainda não exista para o mês
+@type method
+@version 1.0
+@author Alfred Andersen
+@since 28/06/2023
+@requester Kleber Moro
+@consultancy Harpia
+@site www.harpiaconsultoria.com
+/*/
+Method InsertMETAVEND() Class TSalesTarget
+
+	Local cInsert as Character
+	Local nInsert as Numeric
+
+	cInsert := ""
+	nInsert := 0
+
+	cInsert += "INSERT INTO METAVEND "
+	cInsert += "            (METAVEND.MESANO, "
+	cInsert += "             METAVEND.VEND, "
+	cInsert += "             METAVEND.META, "
+	cInsert += "             METAVEND.FILIAL,"
+	cInsert += "			 METAVEND.META_ECO,"
+	cInsert += "			 METAVEND.META_RUB,"
+	cInsert += "			 METAVEND.META_LAVAZA,"
+	cInsert += "			 METAVEND.REGIAO,"
+	cInsert += "			 METAVEND.VALOR_DESCONTO, "
+	cInsert += "			 METAVEND.DIAS_UTEIS_MES, "
+	cInsert += "			 METAVEND.DIAS_UTEIS_PASSADOS) "
+	cInsert += "SELECT DISTINCT " + ValToSql(::cAnoMes) + ", "
+	cInsert += "                SCT.CT_VEND, "
+	cInsert += "                SCT.CT_VALOR, "
+	cInsert += "                SCT.CT_FILIAL,"
+	cInsert += "				SCT.CT_VLECO,"
+	cInsert += "				SCT.CT_VLRUBB,"
+	cInsert += "				SCT.CT_VLRLAVA,"
+	cInsert += "				SCT.CT_REGIAO,"
+	cInsert += "				SCT.CT_XDESCON,"
+	cInsert += "				" + ValToSql(cValtoChar(::nTotalDiasUteisMes)) + ", "
+	cInsert += "				" + ValToSql(cValtoChar(::nTotalDiasUteisDecorridos)) + " "
+	cInsert += " FROM   SCT010 AS SCT "
+	cInsert += " WHERE  SCT.D_E_L_E_T_ = ' ' "
+	cInsert += "       AND NOT EXISTS (SELECT * "
+	cInsert += "                       FROM   METAVEND AS NOTSTX "
+	cInsert += "                       WHERE  NOTSTX.VEND = SCT.CT_VEND"
+	cInsert += "                              AND NOTSTX.MESANO = " + ValToSql(::cAnoMes) + ") "
+
+	nInsert := TcSqlExec(cInsert)
+
+	If (nInsert < 0)
+		ConOut("LOG DO UPDATE: " + TCSQLError())
+	EndIf
+
+	ConOut("Finalizado: InsertMETAVEND " + "Data " + DTOC(dDatabase) + " - " + TIME())
+
+Return 
+
+/*/{Protheus.doc} TSalesTarget::UpdateMETAVEND
+Altera o valor da meta mensal do vendedor para a mais atual caso exista
+@type method
+@version 1.0
+@author Alfred Andersen
+@since 28/06/2023
+@requester Kleber Moro
+@consultancy Harpia
+@site www.harpiaconsultoria.com
+/*/
+Method UpdateMETAVEND() Class TSalesTarget
+
+	Local cUpdate as Character
+	Local nUpdate as Numeric
+
+	cUpdate := ""
+	nUpdate := 0
+
+	cUpdate += "UPDATE METAVEND "
+	cUpdate += "SET    METAVEND.META = SCT.CT_VALOR, METAVEND.META_ECO = SCT.CT_VLECO, METAVEND.META_RUB = SCT.CT_VLRUBB,"
+	cUpdate += "	   METAVEND.META_LAVAZA = 0, METAVEND.REGIAO = SCT.CT_REGIAO, VALOR_DESCONTO = SCT.CT_XDESCON     "
+	cUpdate += "FROM   SCT010 AS SCT "
+	cUpdate += "WHERE  SCT.CT_FILIAL = METAVEND.FILIAL AND VEND = SCT.CT_VEND AND METAVEND.MESANO = " + ValToSql(::cAnoMes) + " "
+	cUpdate += "		AND SCT.D_E_L_E_T_ = ' ' "
+
+	nUpdate := TcSqlExec(cUpdate)
+
+	If (nUpdate < 0)
+		ConOut("LOG DO UPDATE: " + TCSQLError())
+	EndIf
+
+	ConOut("Finalizado: UpdateMETAVEND " + "Data " + DTOC(dDatabase) + " - " + TIME())
+
+Return 
+
+/*/{Protheus.doc} TSalesTarget::UpdateMETAVENDDias
+Atualização dos dias úteis e já decorridos
+Esta açaõ é necessário, devido a susbtuição de função SLQ que não contemplava dos feriados 
+@type method
+@version 1.0
+@author Alfred Andersen
+@since 30/06/2023
+@requester Kleber Moro
+@consultancy Harpia
+@site www.harpiaconsultoria.com
+/*/
+Method UpdateMETAVENDDias() Class TSalesTarget
+
+	Local cUpdate as Character
+	Local nUpdate as Numeric
+
+	cUpdate := ""
+	nUpdate := 0
+	
+	cUpdate += "UPDATE METAVEND "
+   	cUpdate += "SET DIAS_UTEIS_MES = " + ValToSql(cValtoChar(::nTotalDiasUteisMes)) + " ,"
+	cUpdate += "DIAS_UTEIS_PASSADOS = " + ValToSql(cValtoChar(::nTotalDiasUteisDecorridos)) + " "
+	cUpdate += "WHERE MESANO = " + ValToSql(::cAnoMes) + " "
+
+	nUpdate := TcSqlExec(cUpdate)
+
+	If (nUpdate < 0)
+		ConOut("LOG DO UPDATE: " + TCSQLError())
+	EndIf
+
+	ConOut("Finalizado: UpdateMETAVEND " + "Data " + DTOC(dDatabase) + " - " + TIME())
+
+Return 
+
+/*/{Protheus.doc} TSalesTarget::UpdateSTXMETA1
+corrige dias passados de outros meses
+@type method
+@version 1.0
+@author Alfred Andersen
+@since 28/06/2023
+@requester Kleber Moro
+@consultancy Harpia
+@site www.harpiaconsultoria.com
+/*/
+Method UpdateSTXMETA1() Class TSalesTarget
+
+	Local cUpdate as Character
+	Local nUpdate as Numeric
+
+	cUpdate := ""
+	nUpdate := 0
+
+	cUpdate += "UPDATE STXMETA "
+	cUpdate += "SET STXMETA.STXMETA_TDIASP = STXMETA_TDIAS "
+	cUpdate += "WHERE SUBSTRING(STXMETA.STXMETA_EMISSAO,1,6) <> " + ValToSql(::cAnoMes) + " AND STXMETA.STXMETA_TDIASP <> STXMETA_TDIAS "
+
+	nUpdate := TcSqlExec(cUpdate)
+
+	If (nUpdate < 0)
+		ConOut("LOG DO UPDATE: " + TCSQLError())
+	EndIf
+
+	ConOut("Finalizado: UpdateSTXMETA1 " + "Data " + DTOC(dDatabase) + " - " + TIME())
+
+Return
+
+/*/{Protheus.doc} TSalesTarget::UpdateSTXMETA2
+atualiza dias do mes atual
+@type method
+@version 1.0
+@author Alfred Andersen
+@since 28/06/2023
+@requester Kleber Moro
+@consultancy Harpia
+@site www.harpiaconsultoria.com
+/*/
+Method UpdateSTXMETA2() Class TSalesTarget
+
+	Local cUpdate as Character
+	Local nUpdate as Numeric
+
+	cUpdate := ""
+	nUpdate := 0
+
+	cUpdate += "UPDATE STXMETA "
+	cUpdate += "SET STXMETA.STXMETA_TDIASP = " + ValToSql(::nTotalDiasUteisDecorridos) + ", "
+	cUpdate += "STXMETA.STXMETA_TDIAS = " + ValToSql(::nTotalDiasUteisMes) + " "
+	cUpdate += "WHERE SUBSTRING(STXMETA.STXMETA_EMISSAO,1,6) = " + ValToSql(::cAnoMes) + " "
+
+	nUpdate := TcSqlExec(cUpdate)
+
+	If (nUpdate < 0)
+		ConOut("LOG DO UPDATE: " + TCSQLError())
+	EndIf
+
+	ConOut("Finalizado: UpdateSTXMETA2 " + " Hora " + TIME())
+
+Return
+
+/*/{Protheus.doc} TTarget
+Chamada via schedule 
+@type function
+@version 1.0
+@author Alfred Andersen
+@since 28/06/2023
+@param aPars, array, Empresa e Filial enviados pelo Schedule
+@requester Kleber Moro
+@consultancy Harpia
+@site www.harpiaconsultoria.com
+/*/
+User Function TTarget(aPars)
+
+	Local dDtBase as Date
+	Local dDtIni  as Date
+	Local dDtFin  as Date
+	Local dDtAtu  as Date
+	Local nDiasM  as Numeric
+	Local nDiasD  as Numeric
+	Local cAnoMes as Character
+	Local oObjeto as Object
+
+	DEFAULT aPars := {"01","020201"}
+
+	RpcClearenv()
+
+	RpcSetType( 3 )
+	RpcSetEnv( aPars[1], aPars[2] )
+
+	dDtBase := dDataBase - 1
+	dDtIni  := DATAVALIDA(FirstDate(dDtBase))
+    dDtFin  := DATAVALIDA(LastDate(dDtBase),.F.)
+	dDtAtu  := dDtIni
+	nDiasM  := 0
+	nDiasD  := 0
+	cAnoMes := AnoMes(If(Day(dDtBase) == 1, dDtBase, dDtBase - 1))
+	oObjeto := TSalesTarget():New()
+     
+   	//Cálculo de dias úteis no mês
+    While dDtAtu <= dDtFin
+        //Se a data atual for uma data Válida
+        If dDtAtu == DataValida(dDtAtu) 
+            nDiasM++
+        EndIf
+         
+        dDtAtu := DaySum(dDtAtu, 1)
+    EndDo
+
+	//Cálculo de dias úteis no mês já decorridos
+	dDtAtu := dDtIni
+	dDtFin := dDtBase
+    While dDtAtu <= dDtFin
+        //Se a data atual for uma data Válida
+        If dDtAtu == DataValida(dDtAtu) 
+            nDiasD++
+        EndIf
+         
+        dDtAtu := DaySum(dDtAtu, 1)
+    EndDo
+
+	oObjeto:dData                     := dDtBase
+	oObjeto:cAnoMes                   := cAnoMes
+	oObjeto:cAnoMesLike               := cAnoMes + "%"
+	oObjeto:nTotalDiasUteisMes        := nDiasM
+	oObjeto:nTotalDiasUteisDecorridos := nDiasD
+
+	//Para monitoramento, informa o conteúdo dos parâmetros no log
+	ConOut("oObjeto:dData :" 						+ DTOC(oObjeto:dData) 							)
+	ConOut("oObjeto:cAnoMes :" 						+ oObjeto:cAnoMes 								)
+	ConOut("oObjeto:cAnoMesLike :" 					+ oObjeto:cAnoMesLike 							)
+	ConOut("oObjeto:nTotalDiasUteisMes :" 			+ cValtoChar(oObjeto:nTotalDiasUteisMes) 		)
+	ConOut("oObjeto:nTotalDiasUteisDecorridos :" 	+ cValtoChar(oObjeto:nTotalDiasUteisDecorridos)	)
+
+	//Executa o processamento das querys
+	oObjeto:Process()
+
+	RpcClearEnv()
+
+Return

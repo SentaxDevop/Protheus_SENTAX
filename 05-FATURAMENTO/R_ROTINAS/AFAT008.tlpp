@@ -1,0 +1,331 @@
+#Include "PROTHEUS.CH"
+#Include "RWMAKE.CH"
+#Include "TOPCONN.CH"
+#INCLUDE "TBICONN.CH"
+
+/*/{Protheus.doc} GERAORC
+	Edlardo Ferreira Neves - HARPIA CONSULTORIA - 02/02/2022
+	CRIAÇÃO DO ORÇAMENTO CALL CENTER PARA PEDIDOS INCLUIDOS NA INTEGRAÇÃO DO ECOMMERCE
+	Funções migradas do PE M410STTS
+	@type function
+	@version 1.0
+	@author Alfred Andersen
+	@since 17/08/2023
+/*/
+User Function AFAT008(cNumSC5, _lSFA, _lCRM)
+
+	Local aArea     as Array
+	Local cRotina   as Character
+	Local oObjeto   as Object
+
+	Private _cNumPv as Character
+	Private lSFA    as Logical
+	Private lCRM    as Logical
+
+	aArea   := GetArea()
+	cRotina := "2" //Indica as rotinas de atendimento. 1-Telemarketing 2- Televendas 3-Telecobrança
+	oObjeto := TIntegracaoProtheusxWMSCyberlog():New()
+	_cNumPv := cNumSC5
+	lSFA    := _lSFA
+	lCRM    := _lCRM
+
+	//Execauto da rotina TmkA271
+	SUA->(DbSetOrder(8))
+	If !SUA->(DbSeek(FWxFilial("SUA")+_cNumPv))
+		MyTmkA271(cRotina)
+	End
+
+	//Classe responsável pela integração do Pedido de Venda com o WMS Cyberlog - Alfred Andersen em 17/01/2023
+	oObjeto:cNumeroPedido := _cNumPv
+	oObjeto:nTipoOperacao := 3
+	oObjeto:IntegraPedidodeVenda()
+
+	RestArea(aArea)
+
+Return Nil
+
+/*/{Protheus.doc} MyTmkA271
+	Execauto Atendimento (Call Center)
+	@type function
+	@version 1.0
+	@author Herança
+	@since 12/09/2023
+/*/
+Static Function MyTmkA271(cRotina)
+	Local aCabec     := {}
+	Local aItens     := {}
+	Local aLinha     := {}
+	Local cEndc      := ""
+	Local cEnde      := ""
+	Local cBairroc   := ""
+	Local cBairroe   := ""
+	Local cMunc      := ""
+	Local cMune      := ""
+	Local cCepc      := ""
+	Local cCepe      := ""
+	Local cEstc      := ""
+	Local cEste      := ""
+	Local cCod       := ""
+	Local cLoja      := ""
+	Local nDesconto  := 0
+	Local nFrete     := 0
+	Local nDespesa   := 0
+	Local cCondPag   := ""
+	Local cTransp    := ""
+	Local cOperador  := GETNEWPAR("ST_OPERAD","000001") //GETNEWPAR("ST_OPERAD","000229")
+	Local cTabela    := ""
+	Local cVend1     := ""
+	Local cVend2     := ""
+	Local nCount     := 1
+	Local lBloqRegra := .F.
+	Local cAliasSU7  := ""
+	Local aErroAuto  := {}
+	Local cLog       := ""
+	Local cMail      := ""
+	Local cAssunto   := ""
+	Local nI         := 0
+
+
+
+	DEFAULT cRotina     := "2"  //Indica as rotinas de atendimento. 1-Telemarketing 2- Televendas 3-Telecobrança
+
+//	Private lMSErroAuto 	:= .F.
+//	Private lMSHelpAuto 	:= .F. // .F. -> Vai exibir o help em tela | .T. Não vai exibir o help em tela
+//	Private lAutoErrNoFile 	:= .F. // .F. -> Vai capturar o log | .T. Não vai capturar o log
+
+	Private lMSErroAuto    := .F. //Determina se houve algum tipo de erro durante a execucao do ExecAuto
+	Private lAutoErrNoFile := .T. //Habilita a gravacao de erro da rotina automatica
+	Private lMSHelpAuto    := .T. //Define se mostra ou não os erros na tela (T= Nao mostra; F=Mostra)
+
+	SA1->(DbSetOrder(1))
+	SA1->(DbSeek(FWxFilial("SA1")+SC5->C5_CLIENTE+SC5->C5_LOJACLI))
+
+	cCod        := SA1->A1_COD
+	cLoja       := SA1->A1_LOJA
+	cEndc       := Alltrim(SA1->A1_ENDCOB)
+	cBairroc    := Alltrim(SA1->A1_BAIRROC)
+	cMunc       := Alltrim(SA1->A1_MUNC)
+	cCepc       := Alltrim(SA1->A1_CEPC)
+	cEstc       := Alltrim(SA1->A1_ESTC)
+	cEnde       := Alltrim(SA1->A1_ENDENT)
+	cBairroe    := Alltrim(SA1->A1_BAIRROE)
+	cMune       := Alltrim(SA1->A1_MUNE)
+	cEste       := Alltrim(SA1->A1_ESTE)
+	nDesconto   := (SC5->C5_DESCONT)
+	nFrete      := (SC5->C5_FRETE)
+	nDespesa    := (SC5->C5_DESPESA)
+	cCondPag    := If(Alltrim(SC5->C5_CONDPAG)=="101","002",Alltrim(SC5->C5_CONDPAG))
+	cTransp     := Alltrim(SC5->C5_TRANSP)
+	cTabela     := Alltrim(SC5->C5_TABELA)
+	cVend1      := Alltrim(SC5->C5_VEND1)
+	cVend2      := Alltrim(SC5->C5_VEND2)
+
+	If (lSFA .Or. lCRM ) .And. Empty(cVend2)
+
+		cAliasSU7 := GetNextAlias()
+
+		BeginSql Alias cAliasSU7
+					
+			SELECT 
+				U7_CODVEN
+			FROM 
+				%Table:SU7% SU7
+			WHERE SU7.%NOTDEL%
+				AND U7_COD = %Exp:Alltrim(SA1->A1_XTELEVE)%
+		EndSql
+
+		If (cAliasSU7)->(!EOF())
+			cVend2 := Alltrim((cAliasSU7)->U7_CODVEN)
+		End
+
+	End
+	
+
+	//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+	//³Incluir atendimentos do televendas   ³
+	//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+	ConOut("Inicio: " +Time())
+
+	aCabec := {}
+	aItens := {}
+	AADD(aCabec,{ "UA_CLIENTE"   , cCod           , Nil })
+	AADD(aCabec,{ "UA_LOJA"      , cLoja          , Nil })
+	AADD(aCabec,{ "UA_VEND"      , cVend1         , Nil })
+	AADD(aCabec,{ "UA_TABELA"    , cTabela        , Nil })
+
+	If lSFA .Or. lCRM
+		AADD(aCabec,{ "UA_OPER"      , "1"            , Nil })  // 1-Faturamento 2-Orcamento 3-Atendimento
+	Else
+		AADD(aCabec,{ "UA_OPER"      , "2"            , Nil })  // 1-Faturamento 2-Orcamento 3-Atendimento
+	End
+
+	AADD(aCabec,{ "UA_VEND2"     , cVend2         , Nil })
+	AADD(aCabec,{ "UA_CONDPG"    , cCondPag       , Nil })  // Condicao de Pagamento
+	AADD(aCabec,{ "UA_XSTATUS"   , "5"            , Nil })  // 5 - ecommerce
+	AADD(aCabec,{ "UA_OPERADO"   , cOperador      , Nil })  // Codigo do Operador
+	
+	If cVend1 == "510" //"E-COMMERCE"
+		AADD(aCabec,{ "UA_TMK"       , "S"            , Nil })  // 1=Receptivo;2=Ativo;3=Acom;4=Rep;5=Ret. Ativo;6=Cotacao;7=O.S;8=E-mail;9=WhatsApp;S=Site;G=Google;U=Up;N=Nao Atend;R=Rds;M=Mkt 
+	ElseIf lSFA .Or. lCRM
+	 	AADD(aCabec,{ "UA_TMK"       , "S"            , Nil })  // 1=Receptivo;2=Ativo;3=Acom;4=Rep;5=Ret. Ativo;6=Cotacao;7=O.S;8=E-mail;9=WhatsApp;S=Site;G=Google;U=Up;N=Nao Atend;R=Rds;M=Mkt 
+	Else
+		AADD(aCabec,{ "UA_TMK"       , "M"            , Nil })  // 1=Receptivo;2=Ativo;3=Acom;4=Rep;5=Ret. Ativo;6=Cotacao;7=O.S;8=E-mail;9=WhatsApp;S=Site;G=Google;U=Up;N=Nao Atend;R=Rds;M=Mkt  
+	EndIf 
+
+	aadd(aCabec, {"UA_TRANSP" , cTransp  , Nil}) // Transportadora
+	aadd(aCabec, {"UA_ENDCOB" , cEndc    , Nil})
+	aadd(aCabec, {"UA_BAIRROC", cBairroc , Nil})
+	aadd(aCabec, {"UA_MUNC"   , cMunc    , Nil})
+	aadd(aCabec, {"UA_CEPC"   , cCepc    , Nil})
+	aadd(aCabec, {"UA_ESTC"   , cEstc    , Nil})
+	aadd(aCabec, {"UA_ENDENT" , cEnde    , Nil})
+	aadd(aCabec, {"UA_BAIRROE", cBairroe , Nil})
+	aadd(aCabec, {"UA_MUNE"   , cMune    , Nil})
+	aadd(aCabec, {"UA_CEPE"   , cCepe    , Nil})
+	aadd(aCabec, {"UA_ESTE"   , cEste    , Nil})
+	aadd(aCabec, {"UA_PROSPEC", .F.      , Nil})
+	aadd(aCabec, {"UA_DESCONT", nDesconto, Nil})
+	aadd(aCabec, {"UA_FRETE"  , nFrete   , Nil})
+	aadd(aCabec, {"UA_DESPESA", nDespesa , Nil})
+	aadd(aCabec, {"UA_XPRONEW", "N"      , Nil})
+	aadd(aCabec, {"UA_XMIX"   , "N"      , Nil})
+	aadd(aCabec, {"UA_XTPCOM" , "1"      , Nil})
+
+	DbSelectArea("SC6")
+	SC6->(DbSetOrder(1)) //C6_FILIAL+C6_NUM+C6_ITEM+C6_PRODUTO
+	If SC6->(DbSeek(xFilial("SC6")+SC5->C5_NUM ))
+		While SC6->(!Eof()) .AND. xFilial("SC6") == SC6->C6_FILIAL .AND. SC5->C5_NUM == SC6->C6_NUM
+            
+			lBloqRegra := .F.
+			aLinha := {}
+			aadd(aLinha,{"UB_ITEM"      , Alltrim(SC6->C6_ITEM)    	, Nil})
+			aadd(aLinha,{"UB_PRODUTO"   , Alltrim(SC6->C6_PRODUTO) 	, Nil})
+			aadd(aLinha,{"UB_QUANT"     , SC6->C6_QTDVEN    		, Nil})
+			aadd(aLinha,{"UB_VRUNIT"    , SC6->C6_PRCVEN    		, Nil})
+			aadd(aLinha,{"UB_OPER"      , Alltrim(SC6->C6_OPER)     , Nil})
+			aadd(aLinha,{"UB_TES"       , Alltrim(SC6->C6_TES)     	, Nil})
+
+			//TOTVS SFA
+			If lSFA .Or. lCRM
+
+				//Pedidos gerados pelo SFA de Remessa de Comodato, deve ser bloqueados por Regra
+				If SC6->C6_OPER == "02"
+
+					lBloqRegra := .T. 
+
+				End
+
+				//Valida preço x tabela de preço
+				If !lBloqRegra
+
+					lBloqRegra := U_AFAT006(SC6->C6_PRODUTO, SC6->C6_PRCVEN)
+
+				End
+
+
+				If lBloqRegra
+
+					aadd(aLinha,{"UB_BLQREG", "S", Nil})
+
+					conout("BLOQUEIO DE REGRA")
+
+					Reclock("SC6",.F.)
+						SC6->C6_BLOQUEI := "01"
+					MsUnLock()
+
+					RecLock("SC5",.F.)
+						SC5->C5_BLQ := "1"
+					MsUnLock()
+				End
+			End
+			aadd(aItens,aLinha)
+
+			SC6->(DbSkip())
+		EndDo
+	EndIf
+
+
+	If Len(aItens) > 0
+		
+		//DbSelectArea("CLI")
+
+		//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+		//| Executa a chamada da rotina de atendimento CALL CENTER       |
+		//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+		TMKA271(aCabec,aItens,3,cRotina)
+
+		//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
+		//³Exibe se foi feita a inclusao ou se retornou erro³
+		//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
+		If !lMsErroAuto
+			ConOut("Atendimento incluido com sucesso!")
+			Conout("")
+			Conout(" - Pedido --> " + _cNumPv  + " - Atendimento Cab--> " + SUA->UA_NUM + " - Atendimento It--> " + SUB->UB_NUM) 
+			
+			dbSelectArea("SUA")
+			dbSetOrder(1) //UA_FILIAL, UA_NUM, R_E_C_N_O_, D_E_L_E_T_
+			If SUA->(dbSeek(SUB->(UB_FILIAL + UB_NUM)))
+				Conout("")	
+				Conout("Atendimento Recno --> " + cValtoChar( SUA->(RECNO() ))  + " - Pedido --> " + _cNumPv)
+
+				If RecLock("SUA",.F.)
+					SUA->UA_OPER 	:= "1"
+					SUA->UA_STATUS 	:= "LIB"
+					SUA->UA_NUMSC5	:= _cNumPv
+					SUA->(MsUnLock())
+				Endif
+
+				For nCount := 1 to len(aItens)
+					DbSelectArea("SUB")
+					SUB->(DbSetOrder(1)) //UB_FILIAL+UB_NUM+UB_ITEM+UB_PRODUTO
+					If SUB->(DbSeek(SUA->(UA_FILIAL + UA_NUM) + aItens[nCount,1,2]))
+						If RecLock("SUB",.F.)
+							SUB->UB_NUMPV 	:= _cNumPv
+							SUB->UB_ITEMPV 	:= aItens[nCount,1,2]
+							SUB->(MsUnLock())
+						Endif
+					EndIf
+				Next
+
+			EndIf
+
+			//Grava liberação do pedido de vendas
+			If lSFA .And. SC5->C5_BLQ <> "1"
+				Begin Transaction
+				SC5->(MaLiberOk({C5_NUM},.F.))
+				End Transaction
+			Endif 
+
+			Reclock("SC5",.F.)
+                SC5->C5_XSUA = "I"
+            MsUnlock()
+
+		Else
+			Conout("")
+			ConOut("ATENDIMENTO NAO INCLUIDO!!!!!")
+
+			aErroAuto := GetAutoGRLog()
+
+			For nI := 1 To Len(aErroAuto)
+				cLog += aErroAuto[nI] + CRLF
+			Next
+
+			cLog += "Usuário logado: " + __cUserID + CRLF
+
+			cMail := GetMV("ST_MAILTI")
+			cAssunto := "Falha na inclusão automática do Atendimento para o Pedido de Venda: " + _cNumPv + " | Filial : " + cFilAnt
+
+			u_MailTo(cMail, cAssunto, "", "", cLog, "")
+
+			CONOUT(MostraErro("\log", "Pedido_" + Alltrim(_cNumPv) + "_DATA_" + DTOS(Date()) + "_HORA_" + TIME()))
+
+			Reclock("SC5",.F.)
+                SC5->C5_XSUA = "F"
+            MsUnlock()
+
+		End
+
+	EndIf
+	ConOut("Fim  : "+Time())
+
+Return(.T.)

@@ -1,0 +1,26 @@
+#Include "TOTVS.ch"
+
+/*/{Protheus.doc} MTA242ES
+    Ajustes pós-gravação dos itens estornados pela rotina de desmontagem de produtos
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 8/25/2025
+/*/
+User Function MTA242ES()
+
+    //Removido as chamadas devido a solicitação de não uso do processo de estorno
+    //Matido esse PE para uso futuro
+    /*
+    Local lCyberlog := GetNewPar("ST_INTWMS",.T.) as Logical
+
+    If lCyberlog .And. cFilAnt == '020201'
+
+        Reclock("SD3",.F.)
+            SD3->D3_XINTEG := "N"
+        SD3->(MSUnlock())
+
+    End
+    */
+    
+Return

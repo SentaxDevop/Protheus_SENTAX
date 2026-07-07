@@ -1,0 +1,84 @@
+#Include "PROTHEUS.CH"
+#Include "RWMAKE.CH"
+#Include "TOPCONN.CH"
+
+/*/{Protheus.doc} AFAT009
+    Objetivo realizar operações de ajustes entre FAT x Call Center
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 18/09/2023
+    @consultancy Harpia
+    @site www.harpiaconsultoria.com
+/*/
+User Function AFAT009(aPars)
+
+	DEFAULT aPars   := {"01","020201"}
+
+	RpcClearenv()
+
+	RpcSetType( 3 )
+	RpcSetEnv( aPars[1], aPars[2])
+
+    //ATUALIZAÇÃO DAS INCONSISTÊNCIAS NOTA X CALL CENTER
+	U_AFAT009A()
+
+	RpcClearEnv()
+
+Return
+
+/*/{Protheus.doc} AFAT009A
+	Consulta as divergências e realiza a adequação dos dados no Call Center 
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 08/02/2026
+    @consultancy Harpia
+    @site www.harpiaconsultoria.com
+/*/
+User Function AFAT009A()
+
+	Local _cAlias := GetNextAlias() as Character
+
+	BeginSql Alias _cAlias
+
+	    //Definindo campos com tipo específico
+        COLUMN F2_EMISSAO AS DATE
+
+		SELECT
+			C5_NOTA, C5_SERIE, UA_DOC, UA_SERIE, SUA.R_E_C_N_O_ RECSUA, F2_EMISSAO
+		FROM
+			%Table:SC5% SC5 (NOLOCK)
+		INNER JOIN %Table:SUA% SUA (NOLOCK) ON UA_FILIAL = C5_FILIAL
+			AND UA_NUMSC5 = C5_NUM
+			AND C5_CLIENTE = UA_CLIENTE
+			AND C5_LOJACLI = UA_LOJA
+			AND SUA.%notdel%
+		INNER JOIN %Table:SF2% SF2 (NOLOCK) ON F2_FILIAL = C5_FILIAL
+			AND F2_DOC = C5_NOTA
+			AND F2_SERIE = C5_SERIE
+			AND F2_CLIENTE = C5_CLIENTE
+			AND F2_LOJA = C5_LOJACLI
+			AND SF2.%notdel%
+		WHERE SC5.%notdel%
+			//AND C5_FILIAL = %xFilial:SC5%
+			AND C5_NOTA <> UA_DOC
+			AND C5_NOTA NOT IN ('XXXXXXXXX','XXXXXX', '')
+			ORDER BY C5_EMISSAO
+	EndSql
+
+	While (_cAlias)->(!EOF())
+
+		SUA->(dbGoto((_cAlias)->RECSUA))
+
+		RECLOCK("SUA",.F.)
+			SUA->UA_DOC    := (_cAlias)->C5_NOTA
+			SUA->UA_SERIE  := (_cAlias)->C5_SERIE
+			SUA->UA_EMISNF := (_cAlias)->F2_EMISSAO
+			SUA->UA_STATUS := "NF."
+		SUA->(MSUNLOCK())
+
+		(_cAlias)->(DbSkip())
+	End
+
+Return

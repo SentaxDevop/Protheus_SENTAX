@@ -1,0 +1,14 @@
+#INCLUDE "totvs.ch"
+
+/*/{Protheus.doc} FISTRFNFE
+    Criar botões no aRotina da rotina SPEDNFE
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 1/6/2025
+/*/
+User Function FISTRFNFE()
+  
+    aadd(aRotina,{'Impressão Boleto','U_AFAT012' , 0 , 3,0,NIL})
+  
+Return Nil

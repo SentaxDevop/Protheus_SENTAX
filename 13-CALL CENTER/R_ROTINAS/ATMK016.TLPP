@@ -1,0 +1,24 @@
+
+/*/{Protheus.doc} ATMK016
+    Rotina responsável por centralizar as chamadas de "n" menus para fins de baixar o SAC
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 21/11/2023
+/*/
+User Function ATMK016()
+
+    Local cRotina as Character
+    Local oSAC    as Object
+
+    cRotina := FunName()
+    oSAC    := TSACUpdateCenter():New()
+
+    oSAC:cOperator := __cUserId
+    oSAC:cOrigin   := cRotina
+    
+    //Inicia a chamada dos processamentos da classe
+    oSAC:Process()
+
+
+Return

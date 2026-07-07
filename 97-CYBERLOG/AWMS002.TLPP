@@ -1,0 +1,202 @@
+/*/{Protheus.doc} AWMS002
+Rotina específica para envio em lote de todos os Clientes ou Fornecedores para o Cyberlog.
+@type function
+@version 1.0
+@author Alfred Andersen
+@since 02/11/2023
+@param nOpc, numeric, Indica se é cliente ou fornecedor
+/*/
+User Function AWMS002()
+
+    Local cMsg as Character
+    Local nOpc as Numeric
+    Local oSay as Object
+
+    oSay := NIL
+    cMsg := ""
+    nOpc := 0
+
+    cMsg := "Esta rotina tem como premissa o envio de todos os cadastros com o campo A2_XSTAWMS ou A1_XSTAWMS vazios e não bloqueados." + char(13)+char(10)
+    cMsg += char(13)+char(10)
+    cMsg += "Escolha entre as opções abaixo qual o cadastro que deseja ser enviado para o sistema Cyberlog."
+
+
+    nOpc := Aviso("SENTAX", cMsg, {"Fornecedor","Cliente","Cancelar"}, 2, "Envio em Lote de Cadastros para o Cyberlog")
+    
+    If nOpc == 2
+
+        FWMsgRun(, {|oSay| AWMS002A(oSay) }, "Processando", "Processando a exportação dos dados...")
+
+        FWAlertSuccess("Clientes exportados para o WMS com sucesso!", "Integração WMS - Envio de Cliente em Lote")
+
+    Elseif nOpc == 1
+
+        FWMsgRun(, {|oSay| AWMS002B(oSay) }, "Processando", "Processando a exportação dos dados...")
+
+        FWAlertSuccess("Fornecedores exportados para o WMS com sucesso!", "Integração WMS - Envio de Fornecedor em Lote")
+
+    End
+
+Return
+
+/*/{Protheus.doc} AWMS002A
+Envio em lote dos clintes ativos
+@type function
+@version 1.0
+@author Alfred Andersen
+@since 02/11/2023
+@param oSay, object, Objeto de processamento da tela
+/*/
+Static Function AWMS002A(oSay)
+
+    Local cAlias as Character
+    Local aRet as Array
+    Local nTotal as Numeric
+    Local nAtual as Numeric
+
+    cAlias := GetNextAlias()
+    aRet   := {}
+    nTotal := 0
+    nAtual := 0
+
+    If Select( cAlias ) <> 0
+		(cAlias)->( dbCloseArea() )
+	EndIf	
+
+    BeginSql Alias cAlias
+        SELECT 
+            R_E_C_N_O_ RECSA1
+        FROM 
+            %Table:SA1% SA1
+        WHERE SA1.%NOTDEL%
+            AND A1_CEP <> ''
+            AND A1_XSTAWMS = ''
+            AND A1_MSBLQL <> 1
+    EndSql	
+    
+    Count To nTotal
+
+    (cAlias)->( DbGoTop() )
+
+    While ! (cAlias)->( EOF() )
+
+        SA1->(DbGoto((cAlias)->RECSA1))
+
+        nAtual++
+        oSay:SetText("Enviando registro " + cValToChar(nAtual) + " de " + cValToChar(nTotal) + "...")
+        ProcessMessages() // FORÇA O DESCONGELAMENTO DO SMARTCLIENT
+
+        //Endpoint PESSOA é utilizado tendo em vista a replicação do Cliente para o cadastro de Fornecedor
+        aRet := U_fConJson(GetMv('FZ_WSWMS4'))
+
+        If aRet[1]
+
+            Conout("")
+            Conout("Cliente criado/atualizado no WMS --> " + SA1->A1_COD + "/" +  SA1->A1_LOJA)
+
+            RecLock("SA1",.F.)
+                SA1->A1_XSTAWMS := "E"
+                SA1->A1_XERPID  := "C"+Alltrim(SA1->A1_COD)+Alltrim(SA1->A1_LOJA)
+            MSUNLOCK()
+
+        Else
+
+            Conout("")
+            Conout("Cliente NAO criado/atualizado no WMS(ERRO) --> " + SA1->A1_COD + "/" +  SA1->A1_LOJA)
+            Conout(aRet[2])
+            Conout(aRet[3])
+
+            RecLock("SA1",.F.)
+                SA1->A1_XSTAWMS := "F"
+            MSUNLOCK()
+
+        Endif
+
+        aRet := {}
+
+        (cAlias)->( DbSkip() )
+    End
+
+Return
+
+/*/{Protheus.doc} AWMS002B
+Envio em lote dos fornecedores ativos
+@type function
+@version 1.0
+@author Alfred Andersen
+@since 02/11/2023
+@param oSay, object, Objeto de processamento da tela 
+/*/
+Static Function AWMS002B(oSay)
+
+    Local cAlias as Character
+    Local aRet as Array
+    Local nTotal as Numeric
+    Local nAtual as Numeric
+
+    cAlias := GetNextAlias()
+    aRet   := {}
+    nTotal := 0
+    nAtual := 0
+
+    If Select( cAlias ) <> 0
+		(cAlias)->( dbCloseArea() )
+	EndIf	
+
+    BeginSql Alias cAlias
+        SELECT 
+            R_E_C_N_O_ RECSA2
+        FROM 
+            %Table:SA2% SA2
+        WHERE SA2.%NOTDEL%
+            AND A2_CEP <> ''
+            AND A2_XSTAWMS = ''
+            AND A2_MSBLQL <> 1
+    EndSql	
+    
+    Count To nTotal
+
+    (cAlias)->( DbGoTop() )
+
+    While ! (cAlias)->( EOF() )
+
+        SA2->(DbGoto((cAlias)->RECSA2))
+
+        nAtual++
+        oSay:SetText("Enviando registro " + cValToChar(nAtual) + " de " + cValToChar(nTotal) + "...")
+        ProcessMessages() // FORÇA O DESCONGELAMENTO DO SMARTCLIENT
+
+        //Endpoint PESSOA é utilizado tendo em vista a replicação do Cliente para o cadastro de Fornecedor
+        aRet := U_fConJson(GetMv('FZ_WSWMS4'))
+
+        If aRet[1]
+
+            Conout("")
+            Conout("Fornecedor criado/atualizado no WMS --> " + SA2->A2_COD + "/" +  SA2->A2_LOJA)
+
+            RecLock("SA2",.F.)
+                SA2->A2_XSTAWMS := "E"
+                SA2->A2_XERPID  := "F"+Alltrim(SA2->A2_COD)+Alltrim(SA2->A2_LOJA)
+            MSUNLOCK()
+
+        Else
+
+            Conout("")
+            Conout("Fornecedor NAO criado/atualizado no WMS(ERRO) --> " + SA2->A2_COD + "/" +  SA2->A2_LOJA)
+            Conout(aRet[2])
+            Conout(aRet[3])
+
+            RecLock("SA2",.F.)
+                SA2->A2_XSTAWMS := "F"
+            MSUNLOCK()
+
+        Endif
+
+        aRet := {}
+
+        (cAlias)->( DbSkip() )
+    End
+
+Return
+
+

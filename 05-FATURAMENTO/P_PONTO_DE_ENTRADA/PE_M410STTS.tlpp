@@ -1,0 +1,84 @@
+#Include "PROTHEUS.CH"
+#Include "RWMAKE.CH"
+#Include "TOPCONN.CH"
+#INCLUDE 'FWMVCDEF.CH'
+
+/*/{Protheus.doc} M410STTS
+	Ponto-de-Entrada: M410STTS - Alterações no Pedido de Venda
+	Este ponto de entrada pertence à rotina de pedidos de venda, MATA410().
+	Está em todas as rotinas de inclusão, alteração, exclusão, cópia e devolução de compras.
+	Executado após todas as alterações no arquivo de pedidos terem sido feitas.
+	@author  Edlardo Ferreira Neves - HARPIA CONSULTORIA
+	@since   03/02/2022
+	@type function
+/*/  
+User Function M410STTS()
+
+	Local _nOper as Numeric
+	Local lRet   as Logical
+	Local lSFA   as Logical
+	Local lCRM   as Logical
+	Local cMsg   as Character
+	Local lRules as Logical
+	Local oRules as Object
+
+	_nOper := PARAMIXB[1]
+	lRet   := .T.
+	lSFA   := .F.
+	lCRM   := .F.
+	cMsg   := ""
+	lRules := GetNewPar("ST_RULE",.F.)
+	oRules := TSalesOrderBlockingByRules():New()
+
+	//DESABILITADO VALIDAÇÃO FUNNAME PARA REALIZAÇÃO DO TESTE NA INCLUSÃO DO PEDIDO MANUAL
+	If Alltrim(FUNNAME()) <> 'RPC'
+        lRet := .F.
+	EndIf
+
+	//DESABILITADO VALIDAÇÃO PARA REALIZAÇÃO DO TESTE NA INCLUSÃO DO PEDIDO MANUAL
+	If EMPTY(SC5->C5_X_PVSIM) .And. Alltrim(SC5->C5_XMPNOME) == ''
+		lRet := .F.
+	EndIf
+
+	If Alltrim(SA1->A1_CGC) == '16517057000100'
+		lRet := .F.
+	EndIf
+    
+    //Se for TOTVS SFA
+    If !EMPTY(SC5->C5_X_PVSIM)
+        lRet := .T.
+		lSFA := .T.
+		cMsg := "| TOTVS SFA: " + SC5->C5_X_PVSIM
+    End
+
+	//Se for TOTVS CRM
+    If Alltrim(SC5->C5_ORIGEM) = 'MSGEAI' .And. !EMPTY(SC5->C5_NUMEXT)
+        lRet := .T.
+		lCRM := .T.
+		cMsg := "| TOTVS CRM: " + SC5->C5_NUMEXT
+    End
+
+	//CRIAÇÃO DO ORÇAMENTO CALL CENTER PARA PEDIDOS INCLUIDOS NA INTEGRAÇÃO DO ECOMMERCE
+	If _nOper == 3 .And. lRet
+
+		CONOUT("Pedido de Venda N. " + SC5->C5_NUM + cMsg)
+
+		//U_AFAT008(SC5->C5_NUM, lSFA)
+
+		Reclock("SC5",.F.)
+			SC5->C5_XSUA = "S"
+		SC5->(MsUnlock())
+	
+	EndIf
+
+	//Novos bloqueios de regra do pedido de venda 
+	If _nOper <> 5 .And. _nOper <> 7 .And. lRules
+
+		oRules:cRequestNumber    := SC5->C5_NUM
+		oRules:cRequestFilial    := SC5->C5_FILIAL
+		oRules:cPaymentCondition := SC5->C5_CONDPAG
+		oRules:Process()
+
+	End
+
+Return Nil

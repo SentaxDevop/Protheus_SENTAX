@@ -1,0 +1,41 @@
+#INCLUDE "TOTVS.CH"      
+#INCLUDE "TOPCONN.CH"
+
+User Function AOMS006( cQuery as Character)
+
+    Local cAlias006 as Character
+    Local aArea     as Array
+
+    //Default cQuery := ""
+
+    aArea     := FWGetArea()
+    cAlias006 := GetNextAlias()
+
+    If Select(cAlias006) > 0
+        (cAlias006)->(DbCloseArea())
+    End
+
+	TCQUERY cQuery NEW ALIAS (cAlias006) 
+	
+	While !(cAlias006)->(Eof())  
+
+        SC6->(DbSetOrder(1))
+        IF SC6->(DbSeek((cAlias006)->C5_FILIAL + (cAlias006)->C5_NUM + (cAlias006)->C9_ITEM + (cAlias006)->C9_PRODUTO))
+            Reclock("SC6",.F.)
+                SC6->C6_ENTREG := dDataBase
+            SC6->(MsUnLock())
+        End
+
+        SC9->(DbSetOrder(1))
+        IF SC9->(DbSeek((cAlias006)->C5_FILIAL + (cAlias006)->C5_NUM + (cAlias006)->C9_ITEM + (cAlias006)->C9_SEQUEN))
+            Reclock("SC9",.F.)
+                SC9->C9_DATENT := dDataBase
+            SC9->(MsUnLock())
+        End
+		       
+		(cAlias006)->(DbSkip())
+	EndDo 
+
+    FWRestArea( aArea )
+
+Return

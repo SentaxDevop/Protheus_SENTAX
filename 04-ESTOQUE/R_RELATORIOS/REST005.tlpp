@@ -1,0 +1,133 @@
+#include "totvs.ch"
+#include "report.ch" 
+
+/*/{Protheus.doc} REST005
+    Relatório de produtos inventariados com base nos dados regitrados 
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 29/01/2024
+    @requester Moizés Maciel
+    @consultancy Harpia
+    @site www.harpiaconsultoria.com
+/*/
+User Function REST005()
+
+    Local oReport as Object
+
+    oReport := ReportDef()
+    oReport:PrintDialog()
+
+Return( nil )
+
+/*/{Protheus.doc} ReportDef
+    Responsável pela gestão dos parâmetros gerais do Relatório 
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 29/01/2024
+/*/
+Static Function ReportDef()
+    
+    Local oReport   as Object
+    Local oSection1 as Object
+    Local cPerg     as Character
+    Local cTitulo   as Character
+    Local cInfo     as Character
+    
+    cPerg   := "REST005"
+    cTitulo := "Conferência de Inventário - SENTAX"
+    cInfo   := "Relatório de produtos inventariados e seus lançamentos"
+
+    Pergunte(cPerg,.T.)	
+
+    oReport := TReport():New("REST005", cTitulo, cPerg, { |oReport| ReportPrint(oReport) }, cInfo)
+
+	oSection1:= TRSection():New(oReport, "INVENTARIO", {"SB7","SB1"}, , .F., .T.)
+
+    TRCell():New(oSection1, "B7_FILIAL"	,"cAlias", 	 "Filial"		    , PesqPict("SB7","B7_FILIAL")	, TamSx3("B7_FILIAL")[1],.F.,,'RIGHT'	,,'RIGHT'	,,,.T.)
+    TRCell():New(oSection1, "B7_COD"	,"cAlias", 	 "Produto"		    , PesqPict("SB7","B7_COD")		, TamSx3("B7_COD")[1]	,.F.,,'LEFT'	,,'LEFT'	,,,.T.)
+	TRCell():New(oSection1, "B1_DESC"	,"cAlias", 	 "Descrição"        , PesqPict("SB1","B1_DESC")	    , TamSx3("B1_DESC")[1]	,.F.,,'LEFT'	,,'LEFT'	,,,.T.)
+    TRCell():New(oSection1, "B7_LOCAL"	,"cAlias", 	 "Armazém"          , PesqPict("SB7","B7_LOCAL")	, TamSx3("B7_LOCAL")[1]	,.F.,,'RIGHT'	,,'RIGHT'	,,,.T.)
+	TRCell():New(oSection1, "B7_DOC"	,"cAlias", 	 "Documento"	    , PesqPict("SB7","B7_DOC")		, TamSx3("B7_DOC")[1]	,.F.,,'RIGHT'	,,'RIGHT'	,,,.T.)
+    TRCell():New(oSection1, "B7_QUANT"	,"cAlias", 	 "Qtd Inicial"	    , PesqPict("SB7","B7_QUANT")	, TamSx3("B7_QUANT")[1]	,.F.,,'RIGHT'	,,'RIGHT'	,,,.T.)
+    TRCell():New(oSection1, "B7_SSALDO"	,"cAlias", 	 "Qtd Inventario"   , PesqPict("SB7","B7_SSALDO")	, TamSx3("B7_SSALDO")[1],.F.,,'RIGHT'	,,'RIGHT'	,,,.T.)
+    TRCell():New(oSection1, "B7_ORIGEM"	,"cAlias", 	 "Origem"		    , PesqPict("SB7","B7_ORIGEM")	, TamSx3("B7_ORIGEM")[1],.F.,,'LEFT'	,,'LEFT'	,,,.T.)
+    
+    oBreak := TRBreak():New(oSection1,oSection1:Cell("B7_FILIAL"),,.F.)
+
+Return( oReport )
+
+/*/{Protheus.doc} ReportPrint
+    Gestão dos dados e controle de impressão
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 29/01/2024
+/*/
+Static Function ReportPrint( oReport )
+    
+    Local cAlias    as Character
+    Local oSection1 as Character
+
+    cAlias    := GetNextAlias()
+    oSection1 := oReport:Section(1)
+
+    BeginSql alias cAlias
+
+        SELECT B7_FILIAL,
+            B7_COD,
+            B1_DESC,
+            B7_LOCAL,
+            B7_DOC,
+            B7_QUANT,
+            B7_SSALDO,
+            B7_ORIGEM
+        FROM %table:SB7% SB7
+            INNER JOIN %table:SB1% SB1 ON B1_COD = B7_COD
+                AND SB1.%NotDel%
+        WHERE B7_FILIAL     BETWEEN %Exp:MV_PAR01% AND %Exp:MV_PAR02%
+            AND B7_COD      BETWEEN %Exp:MV_PAR03% AND %Exp:MV_PAR04%
+            AND B7_DATA     BETWEEN %Exp:DTOS(MV_PAR05)% AND %Exp:DTOS(MV_PAR06)%
+            AND SB7.%NotDel%
+            AND SB7.R_E_C_N_O_ = (  SELECT 
+                                        MAX(R_E_C_N_O_) 
+                                    FROM 
+                                        %table:SB7% SB7B 
+                                    WHERE SB7B.B7_FILIAL    = SB7.B7_FILIAL 
+                                        AND SB7B.B7_COD     = SB7.B7_COD 
+                                        AND SB7B.B7_LOCAL   = SB7.B7_LOCAL 
+                                        AND SB7B.%NotDel% 
+                                )
+        ORDER BY B7_COD
+
+    EndSql		
+
+    WHILE (cAlias)->(!Eof())
+	
+    	If oReport:Cancel()
+			Exit
+		EndIf
+	
+		oSection1:Init()
+
+        oReport:IncMeter()
+
+        oSection1:Cell("B7_FILIAL"):DISABLE()
+        oSection1:Cell("B7_COD"):SetValue((cAlias)->B7_COD)
+        oSection1:Cell("B1_DESC"):SetValue((cAlias)->B1_DESC)
+        oSection1:Cell("B7_LOCAL"):SetValue((cAlias)->B7_LOCAL)
+        oSection1:Cell("B7_DOC"):SetValue((cAlias)->B7_DOC)
+        oSection1:Cell("B7_QUANT"):SetValue((cAlias)->B7_QUANT)
+        oSection1:Cell("B7_SSALDO"):SetValue((cAlias)->B7_SSALDO)
+        oSection1:Cell("B7_ORIGEM"):SetValue((cAlias)->B7_ORIGEM)
+
+        oSection1:PrintLine()
+
+        (cAlias)->(DbSkip())
+
+    END
+
+    oSection1:Finish()
+
+Return( Nil )

@@ -1,0 +1,726 @@
+#include "totvs.ch"
+#include "tlpp-core.th"
+#include "tlpp-rest.th"
+#INCLUDE 'parmtype.ch'
+#INCLUDE "TOPCONN.CH"
+#INCLUDE "PROTHEUS.CH"
+
+namespace Custom.Vendas
+
+/*/{Protheus.doc} UnileverSellOutController
+    CONTROLLER REST - Endpoints Unilever
+    @type class
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/1/2026
+*/
+class UnileverSellOutController
+
+    Public Data cDataDe  as Character
+    Public Data cDataAte as Character
+    
+    Public method New() as object
+
+    @Get(endpoint="/custom/get/Unilever/Sell-Out", description="Sell-Out and Stock - Unilever")
+    Public method GetSellOut() as object
+
+endclass
+
+method New() class UnileverSellOutController
+
+    ::cDataDe  := ""
+    ::cDataAte := ""
+
+Return (Self)
+
+/*/{Protheus.doc} UnileverSellOutController::GetSellOut
+    GET /custom/get/Unilever/Sell-Out
+    Recebe DataDe e DataAte via query string (formato YYYY-MM-DD),
+    valida os parametros e monta o flat file posicional com os registros
+    01-Cabecalho, 02-Vendedor, 03-Cliente, 04-Vendas, 05-Estoque e 06-Notas Fiscais.
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/1/2026
+*/
+method GetSellOut() class UnileverSellOutController
+
+    local cParamDe  as character
+    local cParamAte as character
+    local jQuery    as object
+    local cResponse as character
+    local oBuilder  as object
+
+    // Le os parametros DataDe e DataAte enviados via query string
+    // Formato esperado: YYYY-MM-DD (ISO 8601), ex: 2025-01-31
+    jQuery    := oRest:getQueryRequest()
+    cParamDe  := jQuery["DataDe"]
+    cParamAte := jQuery["DataAte"]
+
+    // Garante que os valores sejam character (JsonObject retorna Nil se a chave nao existir)
+    if ValType(cParamDe)  != "C" ; cParamDe  := "" ; endif
+    if ValType(cParamAte) != "C" ; cParamAte := "" ; endif
+
+    // Converte de YYYY-MM-DD para YYYYMMDD (formato interno DTOS do Protheus)
+    cParamDe  := StrTran(AllTrim(cParamDe) , "-", "")
+    cParamAte := StrTran(AllTrim(cParamAte), "-", "")
+
+    // Valida presenca obrigatoria dos parametros
+    if Empty(cParamDe) .or. Empty(cParamAte)
+        oRest:setStatusCode(400)
+        oRest:setKeyHeaderResponse("Content-Type"    , "text/plain; charset=utf-8")
+        oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+        oRest:setResponse("Os parametros DataDe e DataAte sao obrigatorios. Formato esperado: YYYY-MM-DD.")
+        Return
+    endif
+
+    // Valida se DataDe e uma data valida
+    if Len(cParamDe) <> 8 .or. StoD(cParamDe) == CtoD("")
+        oRest:setStatusCode(400)
+        oRest:setKeyHeaderResponse("Content-Type"    , "text/plain; charset=utf-8")
+        oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+        oRest:setResponse("DataDe invalida. Formato esperado: YYYY-MM-DD.")
+        Return
+    endif
+
+    // Valida se DataAte e uma data valida
+    if Len(cParamAte) <> 8 .or. StoD(cParamAte) == CtoD("")
+        oRest:setStatusCode(400)
+        oRest:setKeyHeaderResponse("Content-Type"    , "text/plain; charset=utf-8")
+        oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+        oRest:setResponse("DataAte invalida. Formato esperado: YYYY-MM-DD.")
+        Return
+    endif
+
+    // Valida consistencia: DataDe nao pode ser maior que DataAte
+    if cParamDe > cParamAte
+        oRest:setStatusCode(400)
+        oRest:setKeyHeaderResponse("Content-Type"    , "text/plain; charset=utf-8")
+        oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+        oRest:setResponse("DataDe nao pode ser maior que DataAte.")
+        Return
+    endif
+
+    // Atribui os valores validados as variaveis da classe
+    ::cDataDe  := cParamDe
+    ::cDataAte := cParamAte
+
+    begin sequence
+        oBuilder  := UnileverFlatFileBuilder():New(::cDataDe, ::cDataAte)
+        cResponse := oBuilder:BuildFlatFile()
+
+        if Empty(cResponse)
+            oRest:setStatusCode(204)
+            oRest:setKeyHeaderResponse("Content-Type"    , "text/plain; charset=utf-8")
+            oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+            oRest:setResponse("")
+        else
+            oRest:setStatusCode(200)
+            oRest:setKeyHeaderResponse("Content-Type"    , "text/plain; charset=utf-8")
+            oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+            oRest:setResponse(cResponse)
+        endif
+    recover
+        oRest:setStatusCode(500)
+        oRest:setKeyHeaderResponse("Content-Type"    , "text/plain; charset=utf-8")
+        oRest:setKeyHeaderResponse("Content-Encoding", "identity")
+        oRest:setResponse("Falha ao gerar o Flat File Unilever.")
+    end sequence
+
+    FreeObj(oBuilder)
+Return
+
+// =============================================================================
+// CLASSE CONSTRUTORA DO FLAT FILE POSICIONAL - UNILEVER
+// =============================================================================
+
+/*/{Protheus.doc} UnileverFlatFileBuilder
+    Classe responsavel pela construcao do Flat File posicional Unilever.
+    Agrega os registros: 01-Cabecalho, 02-Vendedor, 03-Cliente,
+    04-Vendas, 05-Estoque e 06-Notas Fiscais.
+    @type class
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/1/2026
+*/
+class UnileverFlatFileBuilder
+
+    Public Data cDataDe  as Character
+    Public Data cDataAte as Character
+    
+    Public method New(cDe as character, cAte as character)
+    Public method BuildFlatFile()           as character
+    
+    Private method BuildCabecalho()         as character
+    Private method BuildVendedor()          as character
+    Private method BuildCliente()           as character
+    Private method BuildVendas()            as character
+    Private method BuildEstoque()           as character
+    Private method BuildNotasFiscais()      as character
+
+endclass
+
+method New(cDe as character, cAte as character) class UnileverFlatFileBuilder
+
+    ::cDataDe  := cDe
+    ::cDataAte := cAte
+
+Return Self
+
+/*/{Protheus.doc} UnileverFlatFileBuilder::BuildFlatFile
+    Orquestra a geracao de todos os registros do flat file posicional.
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/1/2026
+*/
+method BuildFlatFile() class UnileverFlatFileBuilder
+
+    local cResult as character
+
+    cResult := ""
+
+    // Registro 01 - CABECALHO
+    cResult += ::BuildCabecalho()
+    // Registro 02 - VENDEDOR
+    cResult += ::BuildVendedor()
+    // Registro 03 - CLIENTE
+    cResult += ::BuildCliente()
+    // Registro 04 - VENDAS
+    cResult += ::BuildVendas()
+    // Registro 05 - ESTOQUE
+    cResult += ::BuildEstoque()
+    // Registro 06 - NOTAS FISCAIS
+    cResult += ::BuildNotasFiscais()
+
+Return cResult
+
+/*/{Protheus.doc} UnileverFlatFileBuilder::BuildCabecalho
+    Geracao do Registro 01 - CABECALHO
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/1/2026
+*/
+method BuildCabecalho() class UnileverFlatFileBuilder
+
+    local cTipo         as character
+    local cCNPJ         as character
+    local cData         as character
+    local cLayout       as character
+    local cCodIndustria as character
+    local cFiller       as character
+
+    cTipo         := "01"
+    cCNPJ         := PADR(ALLTRIM(FWSM0Util():GetSM0Data(, cFilAnt, {"M0_CGC"})[1][2]), 14, "")
+    cData         := Substring(FWTimeStamp(1, dDataBase), 1, 12)
+    cLayout       := "03"
+    cCodIndustria := "009"
+    cFiller       := Space(300)
+
+Return cTipo        + ;
+       cCNPJ        + ;
+       cData        + ;
+       cLayout      + ;
+       cCodIndustria+ ;
+       cFiller      + ;
+       CRLF
+
+/*/{Protheus.doc} UnileverFlatFileBuilder::BuildVendedor
+    Geracao do Registro 02 - VENDEDOR
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/1/2026
+*/
+method BuildVendedor() class UnileverFlatFileBuilder
+
+    local cAliasSE3     as character
+    local cTipo         as character
+    local cNomeVendedor as character
+    local cCodVendedor  as character
+    local cNomeSuperv   as character
+    local cCodSuperv    as character
+    local cNomeGerente  as character
+    local cCodGerente   as character
+    local cFiller       as character
+    local cResult       as character
+
+    cResult   := ""
+    cAliasSE3 := GetNextAlias()
+
+    If Select(cAliasSE3) > 0
+        (cAliasSE3)->(DbCloseArea())
+    EndIf
+
+    BeginSql Alias cAliasSE3
+        SELECT
+            SA3.A3_COD   AS CODVENDEDOR,
+            SA3.A3_NOME  AS NOMEVENDEDOR,
+            SA3.A3_GEREN AS CODGERENTE,
+            (SELECT
+                SA3A.A3_NOME
+             FROM
+                %Table:SA3% SA3A (NOLOCK)
+             WHERE SA3A.%NotDel%
+                AND SA3A.A3_MSBLQL <> '1'
+                AND SA3A.A3_COD = SA3.A3_GEREN
+            ) AS NOMEGERENTE
+        FROM
+            %Table:SA3% SA3 (NOLOCK)
+        WHERE
+            SA3.%NotDel%
+            AND SA3.A3_MSBLQL <> '1'
+            AND A3_GEREN <> ''
+        ORDER BY A3_COD
+    EndSql
+
+    While (cAliasSE3)->(!EOF())
+        cTipo         := "02"
+        cNomeVendedor := PADR(Substring(Alltrim((cAliasSE3)->NOMEVENDEDOR), 1, 50), 50, "")
+        cCodVendedor  := PADR(Substring(Alltrim((cAliasSE3)->CODVENDEDOR),  1, 11), 11, "")
+        cNomeSuperv   := Space(50)
+        cCodSuperv    := Space(11)
+        cNomeGerente  := PADR(Substring(Alltrim((cAliasSE3)->NOMEGERENTE),  1, 50), 50, "")
+        cCodGerente   := PADR(Substring(Alltrim((cAliasSE3)->CODGERENTE),   1, 11), 11, "")
+        cFiller       := Space(115)
+
+        cResult += cTipo        + ;
+                   cNomeVendedor+ ;
+                   cCodVendedor + ;
+                   cNomeSuperv  + ;
+                   cCodSuperv   + ;
+                   cNomeGerente + ;
+                   cCodGerente  + ;
+                   cFiller      + ;
+                   CRLF
+
+        (cAliasSE3)->(DbSkip())
+    End
+
+    If Select(cAliasSE3) > 0
+        (cAliasSE3)->(DbCloseArea())
+    EndIf
+
+Return cResult
+
+/*/{Protheus.doc} UnileverFlatFileBuilder::BuildCliente
+    Geracao do Registro 03 - CLIENTE
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/1/2026
+*/
+method BuildCliente() class UnileverFlatFileBuilder
+
+    local cAliasSA1 as character
+    local cTipo     as character
+    local cCodigo   as character
+    local cCEP      as character
+    local cUF       as character
+    local cCidade   as character
+    local cEndereco as character
+    local cNome     as character
+    local cSegmento as character
+    local cTelefone as character
+    local cContato  as character
+    local cBairro   as character
+    local cFiller   as character
+    local cResult   as character
+
+    cResult   := ""
+    cAliasSA1 := GetNextAlias()
+
+    If Select(cAliasSA1) > 0
+        (cAliasSA1)->(DbCloseArea())
+    EndIf
+
+    BeginSql Alias cAliasSA1
+        SELECT
+            '03'          AS TIPO,
+            A1_CGC        AS CODIGO,
+            A1_CEP        AS CEP,
+            A1_EST        AS UF,
+            A1_MUN        AS CIDADE,
+            A1_END        AS ENDERECO,
+            A1_COD        AS CLIENTE,
+            '98A'         AS SEGMENTO,
+            A1_DDD+A1_TEL AS TELEFONE,
+            A1_CONTATO    AS CONTATO,
+            A1_BAIRRO     AS BAIRRO
+        FROM
+            %Table:SA1% SA1
+        INNER JOIN
+            %Table:SD2% SD2
+            ON  D2_FILIAL   = %xFilial:SD2%
+            AND D2_CLIENTE  = A1_COD
+            AND D2_LOJA     = A1_LOJA
+            AND D2_TIPO     IN ('N','D')
+            AND SD2.%NotDel%
+        INNER JOIN
+            %Table:SB1% SB1
+            ON  B1_COD      = D2_COD
+            AND B1_GRUPO BETWEEN '0410' AND '0420'
+            AND SB1.%NotDel%
+        WHERE
+            SA1.%NotDel%
+            AND A1_MSBLQL <> '1'
+        GROUP BY
+            A1_CGC, A1_CEP, A1_EST, A1_MUN, A1_END,
+            A1_COD, A1_DDD+A1_TEL, A1_CONTATO, A1_BAIRRO
+        ORDER BY
+            A1_COD
+    EndSql
+
+    While (cAliasSA1)->(!EOF())
+        cTipo     := (cAliasSA1)->TIPO
+        cCodigo   := PADR(Substring(Alltrim((cAliasSA1)->CODIGO  ), 1, 14), 14, "")
+        cCEP      := PADR(Substring(Alltrim((cAliasSA1)->CEP     ), 1,  8),  8, "")
+        cUF       := PADR(Substring(Alltrim((cAliasSA1)->UF      ), 1,  2),  2, "")
+        cCidade   := PADR(Substring(Alltrim((cAliasSA1)->CIDADE  ), 1, 50), 50, "")
+        cEndereco := PADR(Substring(Alltrim((cAliasSA1)->ENDERECO), 1, 75), 75, "")
+        cNome     := PADR(Substring(Alltrim((cAliasSA1)->CLIENTE ), 1, 50), 50, "")
+        cSegmento := PADR(Substring(Alltrim((cAliasSA1)->SEGMENTO), 1,  3),  3, "")
+        cTelefone := PADR(Substring(Alltrim((cAliasSA1)->TELEFONE), 1, 15), 15, "")
+        cContato  := PADR(Substring(Alltrim((cAliasSA1)->CONTATO ), 1, 20), 20, "")
+        cBairro   := PADR(Substring(Alltrim((cAliasSA1)->BAIRRO  ), 1, 20), 20, "")
+        cFiller   := Space(41)
+
+        cResult += cTipo     + ;
+                   cCodigo   + ;
+                   cCEP      + ;
+                   cUF       + ;
+                   cCidade   + ;
+                   cEndereco + ;
+                   cNome     + ;
+                   cSegmento + ;
+                   cTelefone + ;
+                   cContato  + ;
+                   cBairro   + ;
+                   cFiller   + ;
+                   CRLF
+
+        (cAliasSA1)->(DbSkip())
+    End
+
+    If Select(cAliasSA1) > 0
+        (cAliasSA1)->(DbCloseArea())
+    EndIf
+
+Return cResult
+
+/*/{Protheus.doc} UnileverFlatFileBuilder::BuildVendas
+    Geracao do Registro 04 - VENDAS
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 4/21/2026
+*/
+method BuildVendas() class UnileverFlatFileBuilder
+
+    local cAliasVENDAS   as character
+    local cTipo          as character
+    local cNotaFiscal    as character
+    local cSerie         as character
+    local cCodProduto    as character
+    local cTipoProduto   as character
+    local cCodUnidadeM   as character
+    local cQtdVendida    as character
+    local cBonifica      as character
+    local cVlrUnitario   as character
+    local cVlrTotalBruto as character
+    local cCanalVenda    as character
+    local cFiller1       as character
+    local cFiller2       as character
+    local cTipoNota      as character
+    local cDataEmissaoNF as character
+    local cDescProduto   as character
+    local cResult        as character
+
+    cResult      := ""
+    cAliasVENDAS := GetNextAlias()
+
+    If Select(cAliasVENDAS) > 0
+        (cAliasVENDAS)->(DbCloseArea())
+    EndIf
+
+    BeginSql Alias cAliasVENDAS
+        SELECT
+            '04'        AS TIPO,
+            F2_DOC      AS NOTA_FISCAL,
+            F2_SERIE    AS SERIE,
+            D2_COD      AS PRODUTO,
+            '02'        AS TIPO_PRODUTO,
+            CASE B1_UM
+                WHEN 'CX' THEN 'C'
+                ELSE 'U'
+            END         AS UNIDADE_MEDIDA,
+            D2_QUANT    AS QUANTIDADE_VENDIDA,
+            'V'         AS BONIFICACAO,
+            D2_PRCVEN   AS VALOR_UNITARIO,
+            D2_TOTAL    AS VALOR_BRUTO,
+            '01'        AS CANAL_VENDA,
+            CASE F2_TIPO
+                WHEN 'N' THEN '01'
+                ELSE '02'
+            END         AS TIPO_NOTA,
+            F2_EMISSAO  AS DT_EMISSAO,
+            B1_DESC     AS DESC_PRODUTO
+        FROM
+            %Table:SF2% SF2
+        INNER JOIN
+            SYS_COMPANY
+            ON  M0_CODIGO  = '01'
+            AND M0_CODFIL  = F2_FILIAL
+            AND SYS_COMPANY.%NotDel%
+        INNER JOIN
+            %Table:SD2% SD2
+            ON  D2_FILIAL  = F2_FILIAL
+            AND D2_DOC     = F2_DOC
+            AND D2_SERIE   = F2_SERIE
+            AND D2_CLIENTE = F2_CLIENTE
+            AND D2_LOJA    = F2_LOJA
+            AND D2_TIPO    = F2_TIPO
+            AND SD2.%NotDel%
+        INNER JOIN
+            %Table:SB1% SB1
+            ON  B1_COD     = D2_COD
+            AND B1_GRUPO BETWEEN '0410' AND '0420'
+            AND SB1.%NotDel%
+        INNER JOIN
+            %Table:SC5% SC5
+            ON  C5_FILIAL  = D2_FILIAL
+            AND C5_NUM     = D2_PEDIDO
+            AND SC5.%NotDel%
+        WHERE
+            SF2.%NotDel%
+            AND F2_EMISSAO BETWEEN %Exp:Self:cDataDe% AND %Exp:Self:cDataAte%
+            AND F2_TIPO IN ('N','D')
+        ORDER BY
+            F2_FILIAL, F2_DOC, F2_EMISSAO
+    EndSql
+
+    While (cAliasVENDAS)->(!EOF())
+        cTipo          := (cAliasVENDAS)->TIPO
+        cNotaFiscal    := PADR(Substring(Alltrim((cAliasVENDAS)->NOTA_FISCAL       ), 1, 20), 20, "")
+        cSerie         := PADR(Substring(Alltrim((cAliasVENDAS)->SERIE             ), 1,  3),  3, "")
+        cCodProduto    := PADR(Substring(Alltrim((cAliasVENDAS)->PRODUTO           ), 1, 20), 20, "")
+        cTipoProduto   := PADR(Substring(Alltrim((cAliasVENDAS)->TIPO_PRODUTO      ), 1,  2),  2, "")
+        cCodUnidadeM   := PADR(Substring(Alltrim((cAliasVENDAS)->UNIDADE_MEDIDA    ), 1,  1),  1, "")
+        cQtdVendida    := PADR(Substring(Alltrim((cAliasVENDAS)->QUANTIDADE_VENDIDA), 1, 15), 15, "")
+        cBonifica      := PADR(Substring(Alltrim((cAliasVENDAS)->BONIFICACAO       ), 1,  1),  1, "")
+        cVlrUnitario   := PADR(Substring(Alltrim((cAliasVENDAS)->VALOR_UNITARIO    ), 1, 15), 15, "")
+        cVlrTotalBruto := PADR(Substring(Alltrim((cAliasVENDAS)->VALOR_BRUTO       ), 1, 15), 15, "")
+        cCanalVenda    := PADR(Substring(Alltrim((cAliasVENDAS)->CANAL_VENDA       ), 1,  1),  1, "")
+        cFiller1       := Space(40)
+        cTipoNota      := PADR(Substring(Alltrim((cAliasVENDAS)->TIPO_NOTA         ), 1,  2),  2, "")
+        cDataEmissaoNF := PADR(Substring(Alltrim((cAliasVENDAS)->DT_EMISSAO        ), 1,  8),  8, "")
+        cDescProduto   := PADR(Substring(Alltrim((cAliasVENDAS)->DESC_PRODUTO      ), 1, 50), 50, "")
+        cFiller2       := Space(41)
+
+        cResult += cTipo         + ;
+                   cNotaFiscal   + ;
+                   cSerie        + ;
+                   cCodProduto   + ;
+                   cTipoProduto  + ;
+                   cCodUnidadeM  + ;
+                   cQtdVendida   + ;
+                   cVlrUnitario  + ;
+                   cVlrTotalBruto+ ;
+                   cCanalVenda   + ;
+                   cFiller1      + ;
+                   cTipoNota     + ;
+                   cDataEmissaoNF+ ;
+                   cDescProduto  + ;
+                   cFiller2      + ;
+                   CRLF
+
+        (cAliasVENDAS)->(DbSkip())
+    End
+
+    If Select(cAliasVENDAS) > 0
+        (cAliasVENDAS)->(DbCloseArea())
+    EndIf
+
+Return cResult
+
+/*/{Protheus.doc} UnileverFlatFileBuilder::BuildEstoque
+    Geracao do Registro 05 - ESTOQUE
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 4/21/2026
+*/
+method BuildEstoque() class UnileverFlatFileBuilder
+
+    local cAliasESTOQUE   as character
+    local cTipo           as character
+    local cCodProduto     as character
+    local cDataEstoque    as character
+    local cQtdEstoque     as character
+    local cCodUnidade     as character
+    local cTipoCodProduto as character
+    local cFiller         as character
+    local cResult         as character
+
+    cResult       := ""
+    cAliasESTOQUE := GetNextAlias()
+
+    If Select(cAliasESTOQUE) > 0
+        (cAliasESTOQUE)->(DbCloseArea())
+    EndIf
+
+    BeginSql Alias cAliasESTOQUE
+        SELECT
+            '05'                                AS TIPO,
+            B1_COD                              AS CODIGO_PRODUTO,
+            CONVERT(VARCHAR(8), GETDATE(), 112) AS DATA_ESTOQUE,
+            B2_QATU                             AS QUANTIDADE_ESTOQUE,
+            CASE B1_UM
+                WHEN 'CX' THEN 'C'
+                ELSE 'U'
+            END                                 AS COD_UNIDADE_MEDIDA,
+            '01'                                AS TIPO_CODIGO_PRODUTO
+        FROM
+            %Table:SB1% SB1
+        INNER JOIN
+            SYS_COMPANY
+            ON  M0_CODIGO  = %Exp:cEmpAnt%
+            AND M0_CODFIL  = %xFilial:SB2%
+            AND SYS_COMPANY.%NotDel%
+        INNER JOIN
+            %Table:SB2% SB2
+            ON  B2_FILIAL  = M0_CODFIL
+            AND B2_COD     = B1_COD
+            AND B2_LOCAL   = '01'
+            AND SB2.%NotDel%
+        WHERE
+            SB1.%NotDel%
+            AND B1_GRUPO BETWEEN '0410' AND '0420'
+            AND B1_MSBLQL <> '1'
+    EndSql
+
+    While (cAliasESTOQUE)->(!EOF())
+        cTipo           := (cAliasESTOQUE)->TIPO
+        cCodProduto     := PADR(Substring(Alltrim((cAliasESTOQUE)->CODIGO_PRODUTO     ), 1, 20), 20, "")
+        cDataEstoque    := PADR(Substring(Alltrim((cAliasESTOQUE)->DATA_ESTOQUE       ), 1,  8),  8, "")
+        cQtdEstoque     := PADR(Substring(Alltrim((cAliasESTOQUE)->QUANTIDADE_ESTOQUE ), 1, 15), 15, "")
+        cCodUnidade     := PADR(Substring(Alltrim((cAliasESTOQUE)->COD_UNIDADE_MEDIDA ), 1,  1),  1, "")
+        cTipoCodProduto := PADR(Substring(Alltrim((cAliasESTOQUE)->TIPO_CODIGO_PRODUTO), 1,  2),  2, "")
+        cFiller         := Space(252)
+
+        cResult += cTipo           + ;
+                   cCodProduto     + ;
+                   cDataEstoque    + ;
+                   cQtdEstoque     + ;
+                   cCodUnidade     + ;
+                   cTipoCodProduto + ;
+                   cFiller         + ;
+                   CRLF
+
+        (cAliasESTOQUE)->(DbSkip())
+    End
+
+    If Select(cAliasESTOQUE) > 0
+        (cAliasESTOQUE)->(DbCloseArea())
+    EndIf
+
+Return cResult
+
+/*/{Protheus.doc} UnileverFlatFileBuilder::BuildNotasFiscais
+    Geracao do Registro 06 - NOTAS FISCAIS
+    @type method
+    @version 1.0
+    @author Alfred Andersen
+    @since 4/21/2026
+*/
+method BuildNotasFiscais() class UnileverFlatFileBuilder
+
+    local cAliasNF     as character
+    local cTipo        as character
+    local cNotaFiscal  as character
+    local cSerie       as character
+    local cEmissao     as character
+    local cTipoNota    as character
+    local cCodVendedor as character
+    local cCodCliente  as character
+    local cFiller      as character
+    local cResult      as character
+
+    cResult   := ""
+    cAliasNF  := GetNextAlias()
+
+    If Select(cAliasNF) > 0
+        (cAliasNF)->(DbCloseArea())
+    EndIf
+
+    BeginSql Alias cAliasNF
+        SELECT
+            '06'       AS TIPO,
+            F2_DOC     AS NOTA_FISCAL,
+            F2_SERIE   AS SERIE,
+            F2_EMISSAO AS EMISSAO,
+            CASE F2_TIPO
+                WHEN 'N' THEN '01'
+                ELSE '02'
+            END        AS TIPO_NOTA,
+            F2_VEND1   AS CODIGO_VENDEDOR,
+            F2_CLIENTE AS CODIGO_CLIENTE
+        FROM
+            %Table:SF2% SF2
+        INNER JOIN
+            SYS_COMPANY
+            ON  M0_CODIGO  = %Exp:cEmpAnt%
+            AND M0_CODFIL  = F2_FILIAL
+            AND SYS_COMPANY.%NotDel%
+        INNER JOIN
+            %Table:SD2% SD2
+            ON  D2_FILIAL  = F2_FILIAL
+            AND D2_DOC     = F2_DOC
+            AND D2_SERIE   = F2_SERIE
+            AND D2_CLIENTE = F2_CLIENTE
+            AND D2_LOJA    = F2_LOJA
+            AND D2_TIPO    = F2_TIPO
+            AND SD2.%NotDel%
+        INNER JOIN
+            %Table:SB1% SB1
+            ON  B1_COD     = D2_COD
+            AND B1_GRUPO BETWEEN '0410' AND '0420'
+            AND SB1.%NotDel%
+        WHERE
+            SF2.%NotDel%
+            AND F2_FILIAL  = %xFilial:SF2%
+            AND F2_EMISSAO BETWEEN %Exp:Self:cDataDe% AND %Exp:Self:cDataAte%
+            AND F2_TIPO IN ('N','D')
+        ORDER BY
+            F2_FILIAL, F2_DOC, F2_EMISSAO
+    EndSql
+
+    While (cAliasNF)->(!EOF())
+        cTipo        := (cAliasNF)->TIPO
+        cNotaFiscal  := PADR(Substring(Alltrim((cAliasNF)->NOTA_FISCAL    ), 1, 20), 20, "")
+        cSerie       := PADR(Substring(Alltrim((cAliasNF)->SERIE          ), 1,  3),  3, "")
+        cEmissao     := PADR(Substring(Alltrim((cAliasNF)->EMISSAO        ), 1,  8),  8, "")
+        cTipoNota    := PADR(Substring(Alltrim((cAliasNF)->TIPO_NOTA      ), 1,  2),  2, "")
+        cCodVendedor := PADR(Substring(Alltrim((cAliasNF)->CODIGO_VENDEDOR), 1, 11), 11, "")
+        cCodCliente  := PADR(Substring(Alltrim((cAliasNF)->CODIGO_CLIENTE ), 1, 14), 14, "")
+        cFiller      := Space(240)
+
+        cResult += cTipo        + ;
+                   cNotaFiscal  + ;
+                   cSerie       + ;
+                   cEmissao     + ;
+                   cTipoNota    + ;
+                   cCodVendedor + ;
+                   cCodCliente  + ;
+                   cFiller      + ;
+                   CRLF
+
+        (cAliasNF)->(DbSkip())
+    End
+
+    If Select(cAliasNF) > 0
+        (cAliasNF)->(DbCloseArea())
+    EndIf
+
+Return cResult

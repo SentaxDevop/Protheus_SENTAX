@@ -1,0 +1,65 @@
+#Include "TOTVS.ch"
+
+/*/{Protheus.doc} AEST006
+    JOB de gerenciamento dos movimentos intenos a serem integrados com o Cyberlog
+    Originalmente construído apenas para produtos movimentados pela rotina de Desmontagen de Produtos
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 10/16/2025
+/*/
+User Function AEST006(aPars)
+
+	Local cAlias	:= GetNextAlias()
+	Local oObjeto 	:= TIntegracaoProtheusxWMSCyberlog():New()
+
+	DEFAULT aPars   := {"01","020201"}
+
+    Private cOpera	:= "E"
+
+	RpcClearenv()
+
+	RpcSetType( 3 )
+	RpcSetEnv( aPars[1], aPars[2] )
+
+	BeginSql Alias cAlias
+		SELECT
+            D3_FILIAL,
+            D3_DOC,
+            D3_NUMSEQ
+		FROM 
+            %Table:SD3% SD3 (NOLOCK)
+		WHERE SD3.%NOTDEL%
+            AND D3_FILIAL = %Exp:aPars[2]%
+			And D3_XINTEG = 'N'
+            AND D3_ESTORNO= ''
+		ORDER BY 
+            D3_DOC
+	EndSql	
+
+    If (cAlias)->(!EOF())
+
+        Conout("ENVIO DE PRODUTOS via SD3. Rotina: AEST006 - Empresa|Filial [ " + aPars[1] + "|" + aPars[2] + " ] - Data|Hora ["+DTOC(DATE())+" - "+TIME()+"]")
+
+
+        While (cAlias)->(!EOF())
+
+            oObjeto:cFilSD3    := (cAlias)->D3_FILIAL
+            oObjeto:cDocumento := (cAlias)->D3_DOC
+            oObjeto:cNumSeq    := (cAlias)->D3_NUMSEQ
+            oObjeto:MovimentoInterno()
+
+            (cAlias)->(dbSkip())        
+        End 
+
+        Conout("FIM ENVIO DE PRODUTOS via SD3 PARA O WMS - Data|Hora ["+DTOC(DATE())+" - "+TIME()+"]")
+
+    End 		
+
+	FREEOBJ( oObjeto )
+
+  	DBCloseAll()
+
+	RpcClearEnv()
+
+Return

@@ -1,0 +1,23 @@
+/*/{Protheus.doc} FA740BRW
+    O ponto de entrada FA740BRW foi desenvolvido para adicionar itens no menu da mBrowse. 
+    Retorna array com os novas opções e manda como parâmetro o array com as opções padrão.
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 21/11/2023
+    @requester Kleber Moro
+    @consultancy Harpia
+    @site www.harpiaconsultoria.com
+    @see https://tdn.totvs.com/pages/releaseview.action?pageId=6071250
+/*/
+User Function FA740BRW()
+
+    Local aBotao as Array
+
+    aBotao := {}
+
+    aAdd(aBotao,{'Baixar SAC', 'U_ATMK016()', 0, 5})
+
+Return(aBotao)
+
+
