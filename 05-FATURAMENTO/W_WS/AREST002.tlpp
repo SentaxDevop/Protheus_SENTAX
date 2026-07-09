@@ -385,7 +385,7 @@ method BuildJson() class JsonVendas
                     B1_GRUPO BETWEEN '0402' AND '0410'
                 OR B1_GRUPO BETWEEN '0421' AND '0499'
                 )
-                AND B1_MSBLQL = '2'
+                //AND B1_MSBLQL = '2'
                 AND SB1.%NotDel%
 
             INNER JOIN
@@ -496,7 +496,7 @@ method BuildJson() class JsonVendas
                 AND (B1_GRUPO BETWEEN '0402' AND '0410' 
                     OR 
                     B1_GRUPO BETWEEN '0421' AND '0499')
-                AND B1_MSBLQL = '2'
+                //AND B1_MSBLQL = '2'
                 AND SB1.%NotDel%
 
         INNER JOIN 
@@ -683,7 +683,7 @@ method BuildJson() class JsonEstoque
                 B1_GRUPO BETWEEN '0402' AND '0410'
             OR B1_GRUPO BETWEEN '0421' AND '0499'
             )
-            AND B1_MSBLQL = '2'
+            //AND B1_MSBLQL = '2'
         ORDER BY
             B2_FILIAL,
             B2_COD
@@ -788,7 +788,7 @@ method BuildJson() class JsonPainel
                         %Table:SA3% SA3A (NOLOCK)
                     WHERE 
                         SA3A.%NotDel%
-                        AND SA3A.A3_MSBLQL <> '1'
+                        //AND SA3A.A3_MSBLQL <> '1'
                         AND SA3A.A3_COD = SA3.A3_GEREN
                     ), '')                                  AS Nivel_2_Nome,
             ''                                              AS Nivel_2_Codigo_Fiscal,
@@ -798,7 +798,7 @@ method BuildJson() class JsonPainel
                         %Table:SA3% SA3A (NOLOCK)
                     WHERE 
                         SA3A.%NotDel%
-                        AND SA3A.A3_MSBLQL <> '1'
+                        //AND SA3A.A3_MSBLQL <> '1'
                         AND SA3A.A3_COD = SA3.A3_GEREN
                     ), '')                                  AS Nivel_2_Email,
             ''                                              AS Nivel_2_Celular,
@@ -817,11 +817,11 @@ method BuildJson() class JsonPainel
         INNER JOIN 
             %Table:SA3% SA3 (NOLOCK) 
             ON A3_COD = A1_VEND 
-            AND A3_MSBLQL <> '1' 
+            //AND A3_MSBLQL <> '1' 
             AND SA3.%NotDel%
         WHERE 
             SA1.%NotDel%
-            AND A1_MSBLQL <> '1'
+            //AND A1_MSBLQL <> '1'
         ORDER BY 
             A1_COD
     EndSql
