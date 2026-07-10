@@ -1,9 +1,9 @@
-//-----------------------------------------------------------------
-//Verifica se o valor do produto esta dentro das regras de desconto
-//-----------------------------------------------------------------
 #include "totvs.ch"
 #include "topconn.ch"
 
+//-----------------------------------------------------------------
+//Verifica se o valor do produto esta dentro das regras de desconto
+//-----------------------------------------------------------------
 User Function TMKA1005()
 	Local aArea    := GetArea()
 	Local cProduto := ""	//aCols[N][aScan(aHeader,{|X| ALLTRIM(X[2]) == "UB_PRODUTO"})]
@@ -18,6 +18,7 @@ User Function TMKA1005()
 	Local lCont    := .T.
 	Local lExecuta := .T. 
 	Local nCount   := 1
+	Local cCliente := GetNewPar("SF_1005A","28736")
 
 	For nCount := 1 to Len(ProcName())
 		If Alltrim(ProcName(nCount)) == "U_M410STTS"
@@ -25,24 +26,28 @@ User Function TMKA1005()
 		EndIf
 	Next
 
-	If cEmpAnt == '01' .and. cFilAnt $ ('010101|040401|050501')
+	If cEmpAnt == '01' .and. cFilAnt $ ('010101|040401|050501') .And. lExecuta
+		lExecuta := .F. 
+	End
+
+	If lExecuta .And. (Alltrim(M->C5_TIPO) $ "D|B" .Or. Alltrim(M->C5_CLIENTE) $ cCliente)
 		lExecuta := .F. 
 	End
 
 	If FunName() <> "MATA310" .AND. Alltrim(FunName()) <> "RPC"  .AND. lExecuta .And. !(ProcName(8) == "POST_RECAVARIAS") //REST WMS
 
 		If AllTrim(FunName()) == "MATA410" .OR. AllTrim(FunName()) == "AFAT003"
-				cProduto := aCols[N][aScan(aHeader,{|X| ALLTRIM(X[2]) == "C6_PRODUTO"})]
-				nPreco   := aCols[N][aScan(aHeader,{|X| ALLTRIM(X[2]) == "C6_PRCVEN"})]
+			cProduto := aCols[N][aScan(aHeader,{|X| ALLTRIM(X[2]) == "C6_PRODUTO"})]
+			nPreco   := aCols[N][aScan(aHeader,{|X| ALLTRIM(X[2]) == "C6_PRCVEN"})]
 
-				If !(SC5->C5_TIPO $ "N/C")
-					lCont := .F.
-				Endif
+			If !(SC5->C5_TIPO $ "N/C")
+				lCont := .F.
+			Endif
 
-			Else
-				cProduto := aCols[N][aScan(aHeader,{|X| ALLTRIM(X[2]) == "UB_PRODUTO"})]
-				nPreco   := aCols[N][aScan(aHeader,{|X| ALLTRIM(X[2]) == "UB_VRUNIT"})]
-				cBloq    := "N"
+		Else
+			cProduto := aCols[N][aScan(aHeader,{|X| ALLTRIM(X[2]) == "UB_PRODUTO"})]
+			nPreco   := aCols[N][aScan(aHeader,{|X| ALLTRIM(X[2]) == "UB_VRUNIT"})]
+			cBloq    := "N"
 		EndIf
 
 		If Select("TRB") > 0
