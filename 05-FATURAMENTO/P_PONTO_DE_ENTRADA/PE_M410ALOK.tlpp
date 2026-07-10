@@ -30,7 +30,7 @@ User Function M410ALOK()
             lRet := .F.
 
         Else
-            lRet := FWAlertYesNo("Tem certeza que gostaria de "+IF(ALTERA,"ALTERAR", "EXCLUIR")+" um pedido já integrado com o WMS?", "[M410ALOK - 03]")
+            lRet := If(FWIsInCallStack("A410Copia"),lRet,FWAlertYesNo("Tem certeza que gostaria de "+IF(ALTERA,"ALTERAR", "EXCLUIR")+" um pedido já integrado com o WMS?", "[M410ALOK - 03]"))
         End
 
     EndIf
