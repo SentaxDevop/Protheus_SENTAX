@@ -1,6 +1,13 @@
 #INCLUDE "TOTVS.CH"      
 #INCLUDE "TOPCONN.CH"
 
+/*/{Protheus.doc} AOMS006
+    Alteração da data de entrega nos pedidos envolvidos na carga
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 3/30/2026
+/*/
 User Function AOMS006( cQuery as Character)
 
     Local cAlias006 as Character
@@ -35,6 +42,10 @@ User Function AOMS006( cQuery as Character)
 		       
 		(cAlias006)->(DbSkip())
 	EndDo 
+
+    If Select(cAlias006) > 0
+        (cAlias006)->(DbCloseArea())
+    End
 
     FWRestArea( aArea )
 

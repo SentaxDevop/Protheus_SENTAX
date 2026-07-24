@@ -272,7 +272,7 @@ User Function OM200QRY()
 			") "
 	//cRet += " AND SC6.C6_TES != '"+ GetMv('ST_TESFTSE') +"' "
 
-	//U_AOMS006(cRet)
+	U_AOMS006(cRet)
 			 	  
 Return cRet
       
