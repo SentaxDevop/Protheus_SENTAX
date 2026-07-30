@@ -318,10 +318,12 @@ method BuildJson() class JsonVendas
                 END                                                                       AS EAN,
                 RTRIM(B1_COD)                                                             AS Cod_interno,
                 RTRIM(B1_DESC)                                                            AS Nome_Produto,
-                CASE B1_UM
-                    WHEN 'PC' THEN 'PC'
-                    WHEN 'CX' THEN 'CX'
-                    WHEN 'UN' THEN 'UN'
+                CASE 
+                    WHEN B1_MSBLQL = '1' AND B1_UM = 'CX' AND B1_CONV IN ('0','1') THEN 'UN'
+                    WHEN B1_UM = 'PC' THEN 'PC'
+                    WHEN B1_UM = 'CX' THEN 'CX'
+                    WHEN B1_UM = 'UN' THEN 'UN'
+                    WHEN B1_UM = 'FD' THEN 'UN'
                     ELSE 'OT'
                 END                                                                       AS Unidade_Venda,
                 CASE B1_UM
@@ -435,12 +437,14 @@ method BuildJson() class JsonVendas
                 ELSE B1_COD END                              AS EAN,
             B1_COD                                           AS Cod_interno,
             B1_DESC                                          AS Nome_Produto,
-            CASE B1_UM 
-                WHEN 'PC' THEN 'PC' 
-                    WHEN 'CX' THEN 'CX' 
-                    WHEN 'UN' THEN 'UwoN' 
-                    ELSE 'OT' 
-                END                                             AS Unidade_Venda,
+            CASE 
+                WHEN B1_MSBLQL = '1' AND B1_UM = 'CX' AND B1_CONV IN ('0','1') THEN 'UN'
+                WHEN B1_UM = 'PC' THEN 'PC'
+                WHEN B1_UM = 'CX' THEN 'CX'
+                WHEN B1_UM = 'UN' THEN 'UN'
+                WHEN B1_UM = 'FD' THEN 'UN'
+                ELSE 'OT'
+            END                                             AS Unidade_Venda,
             CASE B1_UM 
                 WHEN 'CX' THEN 
                 CASE 
@@ -448,7 +452,7 @@ method BuildJson() class JsonVendas
                     ELSE B1_CONV 
                     END  
                 ELSE '1' 
-                END                                             AS Fator_Para_Pacote,
+                END                                          AS Fator_Para_Pacote,
             'D'                                              AS Tipo_Documento,
             'R'                                              AS Tipo_Envio,
             D1_TOTAL                                         AS VendaValorBruta,
@@ -643,10 +647,12 @@ method BuildJson() class JsonEstoque
             ''                                                      AS Cod_Lote, 
             ''                                                      AS Data_Validade,
             B1_DESC                                                 AS Nome_Produto,
-            CASE B1_UM
-                WHEN 'PC' THEN 'PC'
-                WHEN 'CX' THEN 'CX'
-                WHEN 'UN' THEN 'UN'
+            CASE 
+                WHEN B1_MSBLQL = '1' AND B1_UM = 'CX' AND B1_CONV IN ('0','1') THEN 'UN'
+                WHEN B1_UM = 'PC' THEN 'PC'
+                WHEN B1_UM = 'CX' THEN 'CX'
+                WHEN B1_UM = 'UN' THEN 'UN'
+                WHEN B1_UM = 'FD' THEN 'UN'
                 ELSE 'OT'
             END                                                     AS Unidade_Venda,
             CASE B1_UM 
