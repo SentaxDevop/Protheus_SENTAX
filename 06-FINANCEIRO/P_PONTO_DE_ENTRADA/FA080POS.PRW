@@ -16,21 +16,30 @@ If !IsBLind()
             Public _cConta  := ""
             Public _cCheque := ""
             Public _cMotBx  := ""
+            Public _cFilAnt := ""
         Else
-            //SA6->A6_BLOCKED<>'1' .AND. (IIF(CFILANT=='020204' .OR. CFILANT=='020203',SA6->A6_XFILIAL=='020201',SA6->A6_XFILIAL==CFILANT) .OR. EMPTY(SA6->A6_XFILIAL))                                                                                                 
-            DbSelectArea("SA6")
-            SA6->(DbSetOrder(1)) //A6_FILIAL, A6_COD, A6_AGENCIA, A6_NUMCON, R_E_C_N_O_, D_E_L_E_T_
-            SA6->(DbGoTop())
-            If SA6->(DbSeek( xFilial("SA6") + _cBanco + _cAgenci + _cConta))
-                If Alltrim(SA6->A6_BLOCKED) <> '1' .AND. (IIF(CFILANT=='020204' .OR. CFILANT=='020203',SA6->A6_XFILIAL=='020201',SA6->A6_XFILIAL==CFILANT) .OR. EMPTY(SA6->A6_XFILIAL)) 
-                    cBanco      := _cBanco
-                    cAgencia    := _cAgenci
-                    cConta      := _cConta
-                    cCheque     := _cCheque
-                    cMotBx      := _cMotBx
-                EndIf 
+            If cFilAnt <> _cFilAnt
+                cBanco      := ''
+                cAgencia    := ''
+                cConta      := ''
+                cCheque     := ''
+                cMotBx      := ''
+            Else
+                //SA6->A6_BLOCKED<>'1' .AND. (IIF(CFILANT=='020204' .OR. CFILANT=='020203',SA6->A6_XFILIAL=='020201',SA6->A6_XFILIAL==CFILANT) .OR. EMPTY(SA6->A6_XFILIAL))                                                                                                 
+                DbSelectArea("SA6")
+                SA6->(DbSetOrder(1)) //A6_FILIAL, A6_COD, A6_AGENCIA, A6_NUMCON, R_E_C_N_O_, D_E_L_E_T_
+                SA6->(DbGoTop())
+                If SA6->(DbSeek( xFilial("SA6") + _cBanco + _cAgenci + _cConta))
+                    If Alltrim(SA6->A6_BLOCKED) <> '1' .AND. (IIF(CFILANT=='020204' .OR. CFILANT=='020203' .OR. CFILANT=='020207',SA6->A6_XFILIAL=='020201',SA6->A6_XFILIAL==CFILANT) .OR. EMPTY(SA6->A6_XFILIAL)) 
+                        cBanco      := _cBanco
+                        cAgencia    := _cAgenci
+                        cConta      := _cConta
+                        cCheque     := _cCheque
+                        cMotBx      := _cMotBx
+                    EndIf 
 
-            EndIf 
+                EndIf 
+            End
     EndIF
 
 EndIf

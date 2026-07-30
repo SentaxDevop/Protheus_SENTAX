@@ -16,6 +16,7 @@ If !IsBLind()
         _cConta     := cConta
         _cCheque    := cCheque
         _cMotBx     := cMotBx
+        _cFilAnt    := cFilAnt
     EndIf 
     
 EndIf 
