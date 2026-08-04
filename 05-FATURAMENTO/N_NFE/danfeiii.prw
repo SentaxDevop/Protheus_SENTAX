@@ -28,6 +28,9 @@
 #DEFINE MAXVALORC 009                                                // Máximo de caracteres por linha de valores numéricos
 #DEFINE MAXCODPRD 040                                                // Máximo de caracteres do codigo de produtos/servicos
 
+static lspedTSSID	:= nil
+static lgetErpId	:= nil
+
 /*/
 ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
 ±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±
@@ -119,22 +122,30 @@ If ( !Empty( MV_PAR06 ) .and. MV_PAR06 == 1 )
 Else
 	If lContinua
 		if MV_PAR04==1
-				cTabela	:= 'SF1'
-				cCampos := 'COUNT(*) AS TOTAL, MAX(SF1.F1_DOC) AS MAIOR, MIN(SF1.F1_DOC) AS MENOR'
+			cTabela	:= 'SF1'
+			cCampos := 'COUNT(*) AS TOTAL, MAX(SF1.F1_DOC) AS MAIOR, MIN(SF1.F1_DOC) AS MENOR'
 
-			elseif MV_PAR04==2
-				cTabela	:= 'SF2'
-				cCampos := 'COUNT(*) AS TOTAL, MAX(SF2.F2_DOC) AS MAIOR, MIN(SF2.F2_DOC) AS MENOR'
+		elseif MV_PAR04==2
+			cTabela	:= 'SF2'
+			cCampos := 'COUNT(*) AS TOTAL, MAX(SF2.F2_DOC) AS MAIOR, MIN(SF2.F2_DOC) AS MENOR'
 
-			endif
+		endif
 
-			cAliasChk := setQuery(cTabela, cCampos, .F.)
-			(cAliasChk)->(DBGoTop())
-			nQtdTotal	:= (cAliasChk)->TOTAL
-			MV_PAR01 	:= (cAliasChk)->MENOR
-			MV_PAR02 	:= (cAliasChk)->MAIOR
-			nQtdDocs 	:=Val(Alltrim(MV_PAR02)) - Val(Alltrim(MV_PAR01))
-			(cAliasChk)->(DbCloseArea())
+		cAliasChk := setQuery(cTabela, cCampos, .F.)
+		(cAliasChk)->(DBGoTop())
+		nQtdTotal	:= (cAliasChk)->TOTAL
+		MV_PAR01 	:= (cAliasChk)->MENOR
+		MV_PAR02 	:= (cAliasChk)->MAIOR
+		nQtdDocs 	:=Val(Alltrim(MV_PAR02)) - Val(Alltrim(MV_PAR01))
+		(cAliasChk)->(DbCloseArea())
+		
+		if existFunc("SpedTamDoc")
+			aDocTam := SpedTamDoc("55", .T.)
+			MV_PAR01 := padr(MV_PAR01,aDocTam[2])
+			MV_PAR02 := padr(MV_PAR02,aDocTam[2])
+			MV_PAR03 := padr(MV_PAR03,aDocTam[1])
+			aDocTam := aSize(aDocTam,0)
+		endIf
 
 		if lJob	
 			if nQtdTotal > nLimitImp .and. lImprime		
@@ -520,14 +531,14 @@ If !lImpDir
 							// o objeto NFEPROC, caso tenha, deixarei na mesma estrutura do legado.					
 							// @autor: Douglas Parreja	@since 30/10/2017												
 							//-----------------------------------------------------------------------												
-							oRetNF := XmlParser(aXML[nX][2],"_",@cAviso,@cErro)				 	
+							oRetNF := TSSXmlParser(aXML[nX][2],"_",@cAviso,@cErro)				 	
 							if ValAtrib("oRetNF:_NFEPROC") <> "U"
 								oNfe := WSAdvValue( oRetNF,"_NFEPROC","string",NIL,NIL,NIL,NIL,NIL)				
 							else
 								oNfe := oRetNF
 							endif
 							
-							oNfeDPEC := XmlParser(aXML[nX][4],"_",@cAviso,@cErro)
+							oNfeDPEC := TSSXmlParser(aXML[nX][4],"_",@cAviso,@cErro)
 							If Empty(cAviso) .And. Empty(cErro)
 								ImpDet(@oDanfe,oNFe,cAutoriza,cModalidade,oNfeDPEC,cCodAutDPEC,aXml[nX][6],aXml[nX][7],aNotas[nX],aXml[nX][11])
 								lExistNfe := .T.
@@ -677,14 +688,14 @@ If !lImpDir
 						// o objeto NFEPROC, caso tenha, deixarei na mesma estrutura do legado.					
 						// @autor: Douglas Parreja	@since 30/10/2017												
 						//-----------------------------------------------------------------------												
-						oRetNF := XmlParser(aXML[nX][2],"_",@cAviso,@cErro)				 	
+						oRetNF := TSSXmlParser(aXML[nX][2],"_",@cAviso,@cErro)				 	
 						if ValAtrib("oRetNF:_NFEPROC") <> "U"
 							oNfe := WSAdvValue( oRetNF,"_NFEPROC","string",NIL,NIL,NIL,NIL,NIL)				
 						else
 							oNfe := oRetNF
 						endif
 						
-						oNfeDPEC := XmlParser(aXML[nX][4],"_",@cAviso,@cErro)
+						oNfeDPEC := TSSXmlParser(aXML[nX][4],"_",@cAviso,@cErro)
 						//(se possui protocolo ou protocolo dpec ou a modalidade de transmissao for 2 ou 5) E codigo retorno nao esta na lista
 						If (!Empty(cAutoriza) .Or. !Empty(cCodAutDPEC) .Or. Alltrim(aXML[nX][8])$"2,5") .And. !cCodRetNFE $ RetCodDene()
 							If aNotas[nX][02]=="E" .And. MV_PAR04==1 .And. (oNfe:_NFE:_INFNFE:_IDE:_TPNF:TEXT=="0")
@@ -845,11 +856,11 @@ If !lImpDir
 							cNaoAut += aNotas[nX][04]+aNotas[nX][05]+CRLF
 						EndIf
 					EndIf
-				freeObj(oNfe)
-				oNfe     := nil 
-				freeObj(oNfe)
-				oNfeDPEC := nil
-				delClassIntF()					
+					freeObj(oNfe)
+					oNfe     := nil
+					freeObj(oNfe)
+					oNfeDPEC := nil
+					delClassIntF()				
 				Next nx
 			EndDo
 
@@ -1399,7 +1410,7 @@ If Type("oTransp:_Transporta")<>"U"
 	aTransp[04] := IIf(Type("oTransp:_VeicTransp:_Placa:TEXT")<>"U",oTransp:_VeicTransp:_Placa:TEXT,"")
 	aTransp[05] := IIf(Type("oTransp:_VeicTransp:_UF:TEXT")<>"U",oTransp:_VeicTransp:_UF:TEXT,"")
 	If Type("oTransp:_Transporta:_CNPJ:TEXT")<>"U"
-		aTransp[06] := Transform(oTransp:_Transporta:_CNPJ:TEXT,"@R! NN.NNN.NNN/NNNN-99")
+		aTransp[06] := Transform(oTransp:_Transporta:_CNPJ:TEXT,"@R! AA.AAA.AAA/AAAA-AA")
 	ElseIf Type("oTransp:_Transporta:_CPF:TEXT")<>"U"
 		aTransp[06] := Transform(oTransp:_Transporta:_CPF:TEXT,"@r 999.999.999-99")
 	EndIf
@@ -2789,7 +2800,7 @@ DanfeCab(oDanfe,nPosV,oNFe,oIdent,oEmitente,nFolha,nFolhas,cCodAutSef,oNfeDPEC,c
 //ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ
 Do Case
 	Case Type("oDestino:_CNPJ")=="O"
-		cAux := TransForm(oDestino:_CNPJ:TEXT,"@R! NN.NNN.NNN/NNNN-99")
+		cAux := TransForm(oDestino:_CNPJ:TEXT,"@R! AA.AAA.AAA/AAAA-AA")
 	Case Type("oDestino:_CPF")=="O"
 		cAux := TransForm(oDestino:_CPF:TEXT,"@r 999.999.999-99")
 	OtherWise
@@ -2850,7 +2861,7 @@ oDanfe:Say(nLine+265 - nAjustaDest,MAXBOXH-30,aHrEnt[01],oFont08:oFont)
 If valType(oEntrega)=="O"
 	Do Case
 		Case Type("oEntrega:_CNPJ")=="O"
-			cAux := TransForm(oEntrega:_CNPJ:TEXT,"@R! NN.NNN.NNN/NNNN-99")
+			cAux := TransForm(oEntrega:_CNPJ:TEXT,"@R! AA.AAA.AAA/AAAA-AA")
 		Case Type("oEntrega:_CPF")=="O"
 			cAux := TransForm(oEntrega:_CPF:TEXT,"@r 999.999.999-99")
 		OtherWise
@@ -2898,7 +2909,7 @@ EndIf
 If valType(oRetirada)=="O"
 	Do Case
 		Case Type("oRetirada:_CNPJ")=="O"
-			cAux := TransForm(oRetirada:_CNPJ:TEXT,"@R! NN.NNN.NNN/NNNN-99")
+			cAux := TransForm(oRetirada:_CNPJ:TEXT,"@R! AA.AAA.AAA/AAAA-AA")
 		Case Type("oRetirada:_CPF")=="O"
 			cAux := TransForm(oRetirada:_CPF:TEXT,"@r 999.999.999-99")
 		OtherWise
@@ -3713,13 +3724,13 @@ oDanfe:Box(nLine+042,602,nLine+088,MAXBOXH+70)
 oDanfe:Box(nLine+075,602,nLine+077,MAXBOXH+70)
 oDanfe:Box(nLine+077,602,nLine+110,MAXBOXH+70)
 oDanfe:Box(nLine+105,602,nLine+139,MAXBOXH+70)
-oDanfe:Say(nLine+097,nBaseTxt,TransForm(SubStr(oNF:_InfNfe:_ID:Text,4),"@r 9999 9999 9999 9999 9999 9999 9999 9999 9999 9999 9999"),oFont10N:oFont)
+oDanfe:Say(nLine+097,nBaseTxt,TransForm(SubStr(oNF:_InfNfe:_ID:Text,4),"@r XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX"),oFont10N:oFont)
 
 
 If nFolha >= 1
 	oDanfe:Say(nLine+087,nBaseTxt,"CHAVE DE ACESSO DA "+iif(lNFCE,"NFC-E","NF-E"),oFont09N:oFont)
 	nFontSize := 28
-	oDanfe:Code128C(nLine+072,nBaseTxt,SubStr(oNF:_InfNfe:_ID:Text,4), nFontSize )
+	Iif(tssAlpha(SubStr(oNF:_InfNfe:_ID:Text,4)),oDanfe:Code128b(nLine+072,nBaseTxt,SubStr(oNF:_InfNfe:_ID:Text,4), 18 ),oDanfe:Code128C(nLine+072,nBaseTxt,SubStr(oNF:_InfNfe:_ID:Text,4), nFontSize ))
 EndIf
 
 If !Empty(cCodAutDPEC) .And. (oNFe:_NFE:_INFNFE:_IDE:_TPEMIS:TEXT)$"4" .And. !lUsaColab
@@ -3756,7 +3767,7 @@ If !Empty(cUF) .And. !Empty(cDataEmi) .And. !Empty(cTPEmis) .And. !Empty(cValIcm
 	If Type("oNF:_InfNfe:_DEST:_CNPJ:Text")<>"U"
 		cCNPJCPF := oNF:_InfNfe:_DEST:_CNPJ:Text
 		If cUf == "99"
-			cCNPJCPF := STRZERO(val(cCNPJCPF),14)
+			cCNPJCPF := PadL(alltrim(cCNPJCPF),14,"0")
 		EndIf
 	ElseIf Type("oNF:_INFNFE:_DEST:_CPF:Text")<>"U"
 		cCNPJCPF := oNF:_INFNFE:_DEST:_CPF:Text
@@ -3765,7 +3776,7 @@ If !Empty(cUF) .And. !Empty(cDataEmi) .And. !Empty(cTPEmis) .And. !Empty(cValIcm
 		cCNPJCPF := ""
 	EndIf
 	cChaveCont += cUF+cTPEmis+cCNPJCPF+cValIcm+cICMSp+cICMSs+cDataEmi
-	cChaveCont := cChaveCont+Modulo11(cChaveCont)
+	cChaveCont := cChaveCont+getDigVer(cChaveCont)
 EndIf
 
 If Empty(cChaveCont)
@@ -3787,16 +3798,9 @@ Endif
 
 // inicio do segundo codigo de barras ref. a transmissao CONTIGENCIA OFF LINE
 If !Empty(cChaveCont) .And. Empty(cCodAutDPEC) .And. !(Val(SubStr(oNF:_INFNFE:_IDE:_SERIE:TEXT,1,3)) >= 900)
-	If nFolha == 1
-		If !Empty(cChaveCont)
-			nFontSize := 28
-			oDanfe:Code128C(nLine+135,nBaseTxt,cChaveCont, nFontSize )
-		EndIf
-	Else
-		If !Empty(cChaveCont)
-			nFontSize := 28
-			oDanfe:Code128C(nLine+135,nBaseTxt,cChaveCont, nFontSize )
-		EndIf
+	If !Empty(cChaveCont)
+		nFontSize := 28
+		Iif(tssAlpha(cChaveCont),oDanfe:Code128b(nLine+135,nBaseTxt,cChaveCont, 18 ),oDanfe:Code128C(nLine+135,nBaseTxt,cChaveCont, nFontSize ))
 	EndIf
 EndIf
 
@@ -3821,7 +3825,7 @@ Endif
 If((oNFe:_NFE:_INFNFE:_IDE:_TPEMIS:TEXT)$"25")
 	oDanfe:Say(nLine+148,610,"DADOS DA "+iif(lNFCE,"NFC-E","NF-E"),oFont08N:oFont)
 Endif
-oDanfe:Say(nLine+158,610,IIF(!Empty(cCodAutDPEC),cCodAutDPEC+" "+AllTrim(IIF(!Empty(dDtReceb),ConvDate(DTOS(dDtReceb)),Iif(oNF:_INFNFE:_VERSAO:TEXT >= "3.10",ConvDate(oNF:_InfNfe:_IDE:_DHEMI:Text),ConvDate(oNF:_InfNfe:_IDE:_DEMI:Text))))+" "+AllTrim(cDtHrRecCab),IIF(!Empty(cCodAutSef) .And. ((Val(SubStr(oNF:_INFNFE:_IDE:_SERIE:TEXT,1,3)) >= 900).And.(oNFe:_NFE:_INFNFE:_IDE:_TPEMIS:TEXT)$"2") .Or. (oNFe:_NFE:_INFNFE:_IDE:_TPEMIS:TEXT)$"1|6|7",cCodAutSef+" "+AllTrim(IIF(!Empty(dDtReceb),ConvDate(DTOS(dDtReceb)),Iif(oNF:_INFNFE:_VERSAO:TEXT >= "3.10",ConvDate(oNF:_InfNfe:_IDE:_DHEMI:Text),ConvDate(oNF:_InfNfe:_IDE:_DEMI:Text))))+" "+AllTrim(cDtHrRecCab),TransForm(cChaveCont,"@r 9999 9999 9999 9999 9999 9999 9999 9999 9999"))),oFont08:oFont)
+oDanfe:Say(nLine+158,610,IIF(!Empty(cCodAutDPEC),cCodAutDPEC+" "+AllTrim(IIF(!Empty(dDtReceb),ConvDate(DTOS(dDtReceb)),Iif(oNF:_INFNFE:_VERSAO:TEXT >= "3.10",ConvDate(oNF:_InfNfe:_IDE:_DHEMI:Text),ConvDate(oNF:_InfNfe:_IDE:_DEMI:Text))))+" "+AllTrim(cDtHrRecCab),IIF(!Empty(cCodAutSef) .And. ((Val(SubStr(oNF:_INFNFE:_IDE:_SERIE:TEXT,1,3)) >= 900).And.(oNFe:_NFE:_INFNFE:_IDE:_TPEMIS:TEXT)$"2") .Or. (oNFe:_NFE:_INFNFE:_IDE:_TPEMIS:TEXT)$"1|6|7",cCodAutSef+" "+AllTrim(IIF(!Empty(dDtReceb),ConvDate(DTOS(dDtReceb)),Iif(oNF:_INFNFE:_VERSAO:TEXT >= "3.10",ConvDate(oNF:_InfNfe:_IDE:_DHEMI:Text),ConvDate(oNF:_InfNfe:_IDE:_DEMI:Text))))+" "+AllTrim(cDtHrRecCab),TransForm(cChaveCont,"@r XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX XXXX"))),oFont08:oFont)
 nFolha++
 
 //ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
@@ -3838,7 +3842,7 @@ oDanfe:Say(nLine+172 - nAjustaNat,612,"CNPJ/CPF",oFont08N:oFont)
 
 Do Case
 	Case Type("oEmitente:_CNPJ")=="O"
-		cAux := TransForm(oEmitente:_CNPJ:TEXT,"@R! NN.NNN.NNN/NNNN-99")
+		cAux := TransForm(oEmitente:_CNPJ:TEXT,"@R! AA.AAA.AAA/AAAA-AA")
 	Case Type("oEmitente:_CPF")=="O"
 		cAux := TransForm(oEmitente:_CPF:TEXT,"@r 999.999.999-99")
 	OtherWise
@@ -4475,7 +4479,7 @@ Static Function DanfeInfC(oDanfe,aMensagem,nBaseTxt,nBaseCol,nLine,nPosMsg, nFol
 		//ÀÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÙ												
 		if file(cLogoTotvs) .or. Resource2File ( cLogoTotvs, cStartPath+cLogoTotvs )
 			oDanfe:SayBitmap(MAXBOXV+1,752,cLogoTotvs,120,20)
-		endif	
+		endif
 	EndIf
 
 Return
@@ -4767,6 +4771,7 @@ Local cMsgNFE		:= ""
 Local cMsgRet		:= ""
 Local cURL			:= PadR(GetNewPar("MV_SPEDURL","http://localhost:8080/sped"),250)
 Local cCodStat		:= ""
+local cIdERP		:= ""
 Local dDtRecib		:= CToD("")
 Local nDtHrRec1		:= 0
 Local nX			:= 0
@@ -4797,7 +4802,7 @@ if !lUsacolab
 	aadd(aRetorno,{"","",aIdNfe[nZ][4]+aIdNfe[nZ][5],"","","",CToD(""),"","","",""})
 	
 	aadd(oWS:oWSNFEID:oWSNotas:oWSNFESID2,NFESBRA_NFESID2():New())
-	Atail(oWS:oWSNFEID:oWSNotas:oWSNFESID2):cID := aIdNfe[nZ][4]+aIdNfe[nZ][5]
+	Atail(oWS:oWSNFEID:oWSNotas:oWSNFESID2):cID := getIdTSS(aIdNfe[nZ][4]+aIdNfe[nZ][5], aIdNfe[nZ][4], aIdNfe[nZ][5], aIdNfe[nZ][6], aIdNfe[nZ][7], aIdNfe[nZ][2], /*cEspecie*/, /*lTransmissao*/, .T.)
 	
 	If oWS:RETORNANOTASNX()
 
@@ -4806,7 +4811,7 @@ if !lUsacolab
 				cRetorno        := oWs:oWSRETORNANOTASNXRESULT:OWSNOTAS:OWSNFES5[nX]:oWSNFE:CXML
 				cProtocolo      := oWs:oWSRETORNANOTASNXRESULT:OWSNOTAS:OWSNFES5[nX]:oWSNFE:CPROTOCOLO								
 				cDHRecbto  		:= oWs:oWSRETORNANOTASNXRESULT:OWSNOTAS:OWSNFES5[nX]:oWSNFE:CXMLPROT
-				oNFeRet			:= XmlParser(cRetorno,"_",@cAviso,@cErro)
+				oNFeRet			:= TSSXmlParser(cRetorno,"_",@cAviso,@cErro)
 				cModTrans		:= IIf(ValAtrib("oNFeRet:_NFE:_INFNFE:_IDE:_TPEMIS:TEXT") <> "U",IIf (!Empty("oNFeRet:_NFE:_INFNFE:_IDE:_TPEMIS:TEXT"),oNFeRet:_NFE:_INFNFE:_IDE:_TPEMIS:TEXT,1),1)
 				cCodStat		:= ""
 				If ValType(oWs:OWSRETORNANOTASNXRESULT:OWSNOTAS:OWSNFES5[nX]:OWSDPEC)=="O"
@@ -4817,7 +4822,7 @@ if !lUsacolab
 	
 				//Tratamento para gravar a hora da transmissao da NFe
 				If !Empty(cProtocolo)
-					oDHRecbto		:= XmlParser(cDHRecbto,"","","")
+					oDHRecbto		:= TSSXmlParser(cDHRecbto,"","","")
 					cDtHrRec		:= IIf(ValAtrib("oDHRecbto:_ProtNFE:_INFPROT:_DHRECBTO:TEXT")<>"U",oDHRecbto:_ProtNFE:_INFPROT:_DHRECBTO:TEXT,"")
 					nDtHrRec1		:= RAT("T",cDtHrRec)
 					cMsgRet 		:= IIf(ValAtrib("oDHRecbto:_ProtNFE:_INFPROT:_XMSG:TEXT")<>"U",oDHRecbto:_ProtNFE:_INFPROT:_XMSG:TEXT,"")
@@ -4830,11 +4835,11 @@ if !lUsacolab
 					AtuSF2Hora(cDtHrRec1,aIdNFe[nZ][5]+aIdNFe[nZ][4]+aIdNFe[nZ][6]+aIdNFe[nZ][7])
 					
 				EndIf
+				cIdERP := getERPID(oWs:oWSRETORNANOTASNXRESULT:OWSNOTAS:OWSNFES5[nX]:CID, "55")[1]
+				nY := aScan(aIdNfe,{|x| x[4]+x[5] == cIdERP})
 	
-				nY := aScan(aIdNfe,{|x| x[4]+x[5] == SubStr(oWs:oWSRETORNANOTASNXRESULT:OWSNOTAS:OWSNFES5[nX]:CID,1,Len(x[4]+x[5]))})
-	
-				oWS:cIdInicial    := aIdNfe[nZ][4]+aIdNfe[nZ][5]
-				oWS:cIdFinal      := aIdNfe[nZ][4]+aIdNfe[nZ][5]
+				oWS:cIdInicial    := oWs:oWSRETORNANOTASNXRESULT:OWSNOTAS:OWSNFES5[nX]:CID
+				oWS:cIdFinal      := oWs:oWSRETORNANOTASNXRESULT:OWSNOTAS:OWSNFES5[nX]:CID
 				If oWS:MONITORFAIXA()
 					nPos    := 0
 					aWsErro := {}
@@ -5154,7 +5159,7 @@ cAux	+=			'<xPais>BRASIL</xPais>'
 cAux 	+= 		'</enderDest>'
 cAux	+= '</dest>'
 
-oDestRet := XmlParser(cAux,"_","","")
+oDestRet := TSSXmlParser(cAux,"_","","")
 oDestRet := oDestRet:_dest
 
 Return oDestRet
@@ -5540,3 +5545,104 @@ ELSE
 	endif
 ENDIF
 return aFaturas
+
+/*/{Protheus.doc} getIdTSS
+description
+@type function
+@version 12.1.2510
+@author fs.martinez
+@since 3/31/2026
+@return variant, return_description
+/*/
+static function getIdTSS(cID, cSerie, cDoc, cClifor, cLoja, cTipo, cEspecie, lTransmissao, lMonitor)
+	local cIDTSS 		:= ""
+
+	default cID 		:= ""
+	default cSerie 		:= ""
+	default cDoc 		:= ""
+	default cClifor 	:= ""
+	default cLoja 		:= ""
+	default cTipo 		:= "S"
+	default cEspecie	:= "SPED"
+	default lTransmissao:= .F.
+	default lMonitor	:= .F.
+	
+	cIDTSS := cID
+	if lspedTSSID == nil
+		lspedTSSID := existFunc("spedTSSID")
+	endIf
+	if lspedTSSID
+		cIDTSS := spedTSSID(cID, cSerie, cDoc, cClifor, cLoja, cTipo, cEspecie, "55", "NFE", lTransmissao, lMonitor)
+	endIf
+
+return cIDTSS
+
+/*/{Protheus.doc} getERPID
+Converte ID do TSS no ID para o ERP com serie e doc
+@type function
+@version 12.1.2510
+@author fs.martinez
+@since 4/30/2026
+@param cIDTSS, character, param_description
+@return variant, return_description
+/*/
+static function getERPID(cIDTSS, cModelo)
+	local aRet			:= {}
+	local cSerieERP 	:= ""
+	local cDocERP 		:= ""
+	local nSerTam		:= 3
+	local nDocTam		:= 9
+
+	if lgetErpId == nil
+		lgetErpId := tlpp.ffunc("totvs.protheus.backoffice.fiscal.tss.util.integration.getErpId")
+	endIf
+	if lgetErpId
+		aRet := totvs.protheus.backoffice.fiscal.tss.util.integration.getErpId(cIDTSS, cModelo)
+	else
+		//TODO: compatibilidade com legado - remover apos 12.1.2410 não tiver mais garantia estendida
+		cSerieERP	:= padr(subStr(cIDTSS, 1, nSerTam), nSerTam)
+		cDocERP		:= padr(allTrim(subStr(cIDTSS, nSerTam+1)), nDocTam)
+		aRet		:= {cSerieERP+cDocERP, cSerieERP, cDocERP}
+	endIf
+
+return aRet
+
+/*/{Protheus.doc} tssAlpha
+Função estática valida se uma string possui caractere alfanumérico
+@type function
+@version 1.0
+@author l.barbosa
+@since 7/2/2026
+@param cString, character, string a ser tratada
+@return variant, retorna se encontrou caractere alfanumérico verdadeiro ou falso
+/*/
+Static Function tssAlpha(cString)
+
+	Local nLoop			:= 0
+	Local lFind			:= .F.
+	default cString		:= ""
+
+	If !empty(cString)
+		For nLoop := 1 To Len(cString)
+			If IsAlpha(SubStr(cString, nLoop, 1))
+				lFind := .T.
+				Exit
+			EndIf
+		Next nLoop
+	EndIf
+
+Return lFind
+
+static function getDigVer(cChave)
+    local cRet      := ""
+    default cChave  := ""
+    
+    if existFunc("DigVerTSS")
+        cRet := DigVerTSS(cChave)
+    elseif !tssAlpha(cChave)
+        cRet := Modulo11(cChave)
+    else
+        LogMsg(FunName() , 23, 4, 1, "TSSDANFE", '', "A chave '" + cChave + "' possui caracteres alfanuméricos, o digito verificador incorreto. Será necessário a atualização do sistema (SPEDNFE.PRX) para a correta impressão do DANFE.")
+    endIf
+
+return cRet
