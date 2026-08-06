@@ -1,0 +1,582 @@
+//Bibliotecas
+#Include "tlpp-core.th"
+#Include "FWMVCDef.ch"
+#Include "TOTVS.ch"
+
+//Constantes
+#Define CRLF Chr(13) + Chr(10)
+
+/*/{Protheus.doc} AFAT014
+    Rotina de Alteração de dados de vendedores
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 8/4/2026
+/*/
+User Function AFAT014()
+
+    Local aArea       := FWGetArea()                   as Array
+    Local aParameters := {}                            as Array
+    Local xPar0       := Space(TamSx3( 'A3_COD' )[1])  as Character
+    Local xPar1       := Space(TamSx3( 'A1_COD' )[1])  as Character
+    Local xPar2       := Space(TamSx3( 'A1_LOJA' )[1]) as Character
+    Local xPar3       := StrTran(xPar1, ' ' , 'Z' )    as Character
+    Local xPar4       := StrTran(xPar2, ' ' , 'Z' )    as Character
+
+    // === VALIDAÃ‡ÃƒO DE CAMPOS CUSTOMIZADOS ===
+    If TamSx3('A1_XTELEVE')[1] == 0
+        FWAlertError("Campo A1_XTELEVE não encontrado na SX3. Verifique o dicioário de dados.", "Erro AFAT014")
+        FWRestArea(aArea)
+        Return
+    EndIf
+
+    If TamSx3('A1_ATEND')[1] == 0
+        FWAlertError("Campo A1_ATEND não encontrado na SX3. Verifique o dicioário de dados.", "Erro AFAT014")
+        FWRestArea(aArea)
+        Return
+    EndIf
+
+    // Adicionando os parÃ¢metros de intervalo do ParamBox
+    Aadd(aParameters, {1, "Vendedor Origem", xPar0, "", ".T.", "SA3", ".T.", TamSx3('A3_COD')[1], .T.})
+    Aadd(aParameters, {1, "Cliente De"     , xPar1, "", ".T.", "SA1", ".T.", TamSx3('A1_COD')[1], .F.})
+    Aadd(aParameters, {1, "Loja De"        , xPar2, "", ".T.", ""   , ".T.", TamSx3('A1_LOJA')[1], .F.})
+    Aadd(aParameters, {1, "Cliente AtÃ©"    , xPar3, "", ".T.", "SA1", ".T.", TamSx3('A1_COD')[1], .T.})
+    Aadd(aParameters, {1, "Loja AtÃ©"       , xPar4, "", ".T.", ""   , ".T.", TamSx3('A1_LOJA')[1], .T.})
+
+    //Se a pergunta for confirma, chama a tela
+    If ParamBox(aParameters, 'Informe os parâmetros', /*aRet*/, /*bOk*/, /*aButtons*/, /*lCentered*/, /*nPosx*/, /*nPosy*/, /*oDlgWizard*/, /*cLoad*/, .F., .F.)
+        AFAT014createDialog()
+    EndIf
+
+    FWRestArea(aArea)
+Return
+
+/*/{Protheus.doc} AFAT014createDialog
+    Monta a tela com a marcação de dados
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 8/4/2026
+/*/
+Static Function AFAT014createDialog()
+    Local aArea          := FWGetArea()                           as Array
+    Local aFields        := {}                                    as Array
+    Local aBrowseColumns := {}                                    as Array
+    Local cFont          := 'Tahoma'                              as Character
+    Local oFontBrowse    := TFont():New(cFont   , /*uPar2*/, -14) as Object
+    Local cSA3Origem     := ""                                    as Character
+    Local cFontPad       := 'Tahoma'
+    Local oFontSub       := TFont():New(cFontPad,          , -20)
+    Local oFontSubN      := TFont():New(cFontPad,          , -20, , .T.)
+
+    Private oTempTable := Nil as Object
+    Private oDialogMark       as Object
+    Private oPanelMark        as Object
+    Private oMarkBrowse       as Object
+    Private oGetNom           as Object
+    Private oGetCod           as Object
+    Private oPnlHead          as Object
+
+    Private cCodVend      := Space(TamSx3("A3_COD")[1])  as Character
+    Private cNomVend      := Space(TamSx3("A3_NOME")[1]) as Character
+    Private cAliasTmp     := GetNextAlias()              as Character
+    Private aRotina       := MenuDef()                   as Array
+    Private aDialogSize   := MsAdvSize()                 as Array
+    Private nDialogWidth  := aDialogSize[5]              as Numeric
+    Private nDialogHeight := aDialogSize[6]              as Numeric
+
+    //Adiciona as colunas que serÃ£o criadas na temporÃ¡ria
+    aadd(aFields, {'OK'        , 'C', 1                    , 0}) //Flag para marcação
+    aadd(aFields, {'A1_COD'    , 'C', TamSx3("A1_COD")[1]  , 0})
+    aadd(aFields, {'A1_LOJA'   , 'C', TamSx3("A1_LOJA")[1] , 0})
+    aadd(aFields, {'A1_NOME'   , 'C', TamSx3("A1_NOME")[1] , 0})
+    aadd(aFields, {'A1_XTELEVE', 'C', TamSx3("U7_NOME")[1] , 0})
+    aadd(aFields, {'A1_ATEND'  , 'C', TamSx3("A1_ATEND")[1], 0})
+    aadd(aFields, {'NEW_XTELE' , 'C', TamSx3("U7_NOME")[1] , 0})
+    aadd(aFields, {'NEW_ATEND' , 'C', TamSx3("A1_ATEND")[1], 0})
+
+    //Cria a tabela temporária
+    oTempTable:= FWTemporaryTable():New(cAliasTmp)
+    oTempTable:SetFields( aFields )
+    oTempTable:Create()  
+
+    //Popula a tabela temporária
+    Processa({|| AFAT014insertIntoTemporaryTable()}, 'Processando...')
+
+    //Adiciona as colunas que serão exibidas no FWMarkBrowse
+    aBrowseColumns := AFAT014defineBrowseColumns()
+
+    cSA3Origem := Alltrim(MV_PAR01) + " - " + Alltrim(GetAdvFVal("SA3", "A3_NOME", FWxFilial("SA3") + MV_PAR01, 1))
+
+    //Criando a janela
+    oDialogMark := TDialog():New(0, 0, nDialogHeight, nDialogWidth, "Manutenção de Vendedores", /*uParam6*/, /*uParam7*/, /*uParam8*/, /*uParam9*/, /*nClrText*/, /*nClrBack*/, /*uParam12*/, /*oWnd*/, .T.)
+
+        // --- PAINEL SUPERIOR: CABEÃ‡ALHO ---
+        oPnlHead := TPanel():New(010, 010, "", oDialogMark, , , , , , nDialogHeight + 090, 040, .T.)
+
+        @ 005, 015 SAY "Vendedor Origem: "  SIZE 200, 020 FONT oFontSub  OF oPnlHead COLORS RGB(031,073,125) PIXEL
+        @ 005, 100 SAY cSA3Origem           SIZE 500, 020 FONT oFontSubN OF oPnlHead COLORS RGB(031,073,125) PIXEL
+
+        @ 020, 015 SAY "Vendedor Destino: "    SIZE 200, 020 FONT oFontSub  OF oPnlHead COLORS RGB(031,073,125) PIXEL
+        @ 020, 100 MsGet oGetCod Var cCodVend Size 050, 010 Of oPnlHead Pixel Valid AFAT014ValidSeller(@cCodVend, @cNomVend, oGetNom) F3 "SA3"
+
+        @ 021, 160 MsGet oGetNom Var cNomVend Size 280, 010 Of oPnlHead Pixel
+
+        //Dados
+        oPanelMark := tPanel():New(051, 001, '', oDialogMark, /*oFont*/, /*lCentered*/, /*uParam7*/, RGB(000,000,000), RGB(254,254,254), (nDialogWidth/2) - 1, (nDialogHeight/2) - 080)
+
+        oMarkBrowse := FWMarkBrowse():New()
+        oMarkBrowse:SetAlias(cAliasTmp)                
+        oMarkBrowse:SetDescription('')
+        oMarkBrowse:DisableFilter()
+        oMarkBrowse:DisableConfig()
+        oMarkBrowse:DisableSeek()
+        oMarkBrowse:DisableSaveConfig()
+        oMarkBrowse:SetFontBrowse(oFontBrowse)
+        oMarkBrowse:SetFieldMark('OK')
+        oMarkBrowse:SetTemporary(.T.)
+        oMarkBrowse:SetColumns(aBrowseColumns)
+        oMarkBrowse:SetOwner(oPanelMark)
+
+        oMarkBrowse:Activate()
+
+    oDialogMark:Activate(/*uParam1*/, /*uParam2*/, /*uParam3*/, .T., /*bValid*/, /*uParam6*/, /*bInit*/)
+
+    oMarkBrowse:DeActivate()
+    oTempTable:Delete()
+
+    FWRestArea(aArea)
+Return
+
+/*/{Protheus.doc} MenuDef
+    Botões usados no Browse
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 8/4/2026
+/*/
+Static Function MenuDef()
+
+    Local aRotina := {} As Array
+
+    ADD OPTION aRotina TITLE 'Confirmar'         ACTION 'u_AFAT014ClickOnConfirm'  OPERATION 2 ACCESS 0
+    ADD OPTION aRotina TITLE 'Definir Atendente' ACTION 'u_AFAT014SetAtend'        OPERATION 4 ACCESS 0
+
+Return aRotina
+
+/*/{Protheus.doc} AFAT014ValidSeller
+    Validação do vendedor destino
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 8/4/2026
+/*/
+Static Function AFAT014ValidSeller(cCodVend, cNomVend, oGetNom)
+
+    Local lRet := .F. as Logical
+
+    DbSelectArea("SA3")
+    SA3->(DbSetOrder(1)) 
+
+    If SA3->(DbSeek(xFilial("SA3") + cCodVend))
+        cNomVend := SA3->A3_NOME 
+        oGetNom:Refresh()
+        lRet := .T.
+    Else
+        Help("", 1, "VENDNOTFOUND",, "Vendedor nãoo cadastrado.", 1, 0)
+    EndIf
+
+Return lRet
+
+/*/{Protheus.doc} AFAT014insertIntoTemporaryTable
+    Executa a query SQL e popula a tabela temporária
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 8/4/2026
+    @return variant, return_description
+/*/
+Static Function AFAT014insertIntoTemporaryTable()
+    Local cQuery      := ''                as Character
+    Local cFilialSA1  := xFilial("SA1")    as Character
+    Local cClienteDe  := Alltrim(MV_PAR02) as Character
+    Local cClienteAte := Alltrim(MV_PAR04) as Character
+    Local cLojaDe     := Alltrim(MV_PAR03) as Character
+    Local cLojaAte    := Alltrim(MV_PAR05) as Character
+    Local nTotal      := 0                 as Numeric
+    Local nCurrent    := 0                 as Numeric
+
+    //Monta a consulta com filial dinÃ¢mica e tratamento de campos vazios
+    cQuery := "SELECT A1_COD, A1_LOJA, A1_NOME, A1_XTELEVE, A1_ATEND" + CRLF
+    cQuery += " FROM " + RetSqlName("SA1") + " SA1 " + CRLF
+    cQuery += " WHERE SA1.D_E_L_E_T_ = ' ' " + CRLF
+    cQuery += "   AND A1_FILIAL = '" + cFilialSA1 + "' " + CRLF
+    cQuery += "   AND A1_VEND = '" + Alltrim(MV_PAR01) + "' " + CRLF
+
+    // Tratamento de intervalo de clientes (ignora se vazio)
+    If !Empty(cClienteDe) .And. !Empty(cClienteAte)
+        cQuery += "   AND A1_COD BETWEEN '" + cClienteDe + "' AND '" + cClienteAte + "' " + CRLF
+    ElseIf !Empty(cClienteDe)
+        cQuery += "   AND A1_COD >= '" + cClienteDe + "' " + CRLF
+    ElseIf !Empty(cClienteAte)
+        cQuery += "   AND A1_COD <= '" + cClienteAte + "' " + CRLF
+    EndIf
+
+    If !Empty(cLojaDe) .And. !Empty(cLojaAte)
+        cQuery += "   AND A1_LOJA BETWEEN '" + cLojaDe + "' AND '" + cLojaAte + "' " + CRLF
+    ElseIf !Empty(cLojaDe)
+        cQuery += "   AND A1_LOJA >= '" + cLojaDe + "' " + CRLF
+    ElseIf !Empty(cLojaAte)
+        cQuery += "   AND A1_LOJA <= '" + cLojaAte + "' " + CRLF
+    EndIf
+
+    cQuery += " ORDER BY A1_COD, A1_LOJA" + CRLF
+
+    If '--' $ cQuery .Or. 'WITH' $ Upper(cQuery) .Or. 'NOLOCK' $ Upper(cQuery)
+        FWAlertInfo('Alguns comandos (como --, WITH e NOLOCK), nÃ£o sÃ£o executados pela query devido ao ChangeQuery.', 'AtenÃ§Ã£o')
+    EndIf 
+
+    PLSQuery(cQuery, 'QRYDADTMP')
+
+    DbSelectArea('QRYDADTMP')
+    Count to nTotal
+    ProcRegua(nTotal)
+    QRYDADTMP->(DbGoTop())
+
+    While ! QRYDADTMP->(EoF())
+        nCurrent++
+        IncProc('Analisando registro ' + cValToChar(nCurrent) + ' de ' + cValToChar(nTotal) + '...')
+
+        RecLock(cAliasTmp, .T.)
+            (cAliasTmp)->OK         := " "  // C,1 - espaÃ§o = nÃ£o marcado
+            (cAliasTmp)->A1_COD     := QRYDADTMP->A1_COD
+            (cAliasTmp)->A1_LOJA    := QRYDADTMP->A1_LOJA
+            (cAliasTmp)->A1_NOME    := QRYDADTMP->A1_NOME
+            (cAliasTmp)->A1_XTELEVE := QRYDADTMP->A1_XTELEVE
+            (cAliasTmp)->A1_ATEND   := QRYDADTMP->A1_ATEND
+        (cAliasTmp)->(MsUnlock())
+
+        QRYDADTMP->(DbSkip())
+    EndDo
+    QRYDADTMP->(DbCloseArea())
+    (cAliasTmp)->(DbGoTop())
+Return
+
+/*/{Protheus.doc} AFAT014defineBrowseColumns
+    Função que gera as colunas usadas no browse
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 8/4/2026
+/*/
+Static Function AFAT014defineBrowseColumns()
+    Local nCurrent       := 0  as Numeric
+    Local aBrowseColumns := {} as Array
+    Local aTempStruct    := {} as Array
+    Local oColumn              as Object
+
+    aadd(aTempStruct, {'A1_COD'     , 'Código'        , 'C', TamSx3("A1_COD")[1]    , 0, '@!', .F.})
+    aadd(aTempStruct, {'A1_LOJA'    , 'Loja'          , 'C', TamSx3("A1_LOJA")[1]   , 0, '@!', .F.})
+    aadd(aTempStruct, {'A1_NOME'    , 'Descrição'     , 'C', TamSx3("A1_NOME")[1]   , 0, '@!', .F.})
+    aadd(aTempStruct, {'A1_XTELEVE' , 'Cod Atendente' , 'C', TamSx3("U7_NOME")[1], 0, '@!', .F.})
+    aadd(aTempStruct, {'A1_ATEND'   , 'Nome'          , 'C', TamSx3("A1_ATEND")[1]  , 0, '@!', .F.})
+    aadd(aTempStruct, {'NEW_XTELE'  , 'Novo Atendente', 'C', TamSx3("U7_NOME")[1], 0, '@!', .T.})
+    aadd(aTempStruct, {'NEW_ATEND'  , 'Nome'          , 'C', TamSx3("A1_ATEND")[1]  , 0, '@!', .F.})
+
+    For nCurrent := 1 To Len(aTempStruct)
+        oColumn := FWBrwColumn():New()
+        oColumn:SetData(&('{|| ' + cAliasTmp + '->' + AllTrim(aTempStruct[nCurrent][1]) +'}'))
+        oColumn:SetTitle(aTempStruct[nCurrent][2])
+        oColumn:SetType(aTempStruct[nCurrent][3])
+        oColumn:SetSize(aTempStruct[nCurrent][4])
+        oColumn:SetDecimal(aTempStruct[nCurrent][5])
+        oColumn:SetPicture(aTempStruct[nCurrent][6])
+        oColumn:SetEdit(aTempStruct[nCurrent][7])
+
+        If aTempStruct[nCurrent][1] == 'NEW_XTELE'
+            oColumn:SetF3('SA3')
+            oColumn:SetValid({|oCol1, oBrw1| AFAT014SalvaDado(oBrw1, nCurrent, "ExistCpo('SA3')")})
+        EndIf
+
+        If aTempStruct[nCurrent][3] == 'D'
+            oColumn:nAlign := 0
+        ElseIf aTempStruct[nCurrent][3] == 'N'
+            oColumn:nAlign := 2
+        Else
+            oColumn:nAlign := 1
+        EndIf
+
+        aAdd(aBrowseColumns, oColumn)
+    Next
+Return aBrowseColumns
+
+/*/{Protheus.doc} AFAT014ClickOnConfirm
+    Função acionada pelo botãoo Confirmar
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 8/4/2026
+/*/
+User Function AFAT014ClickOnConfirm()
+
+    If !Empty(cCodVend)
+        Processa({|| AFAT014processInformation()}, 'Processando...')
+    Else
+        FWAlertHelp("Vendedor Destino não informado!", "Informe um novo vendedor.")
+    End
+Return
+
+/*/{Protheus.doc} AFAT014processInformation
+FunÃ§Ã£o que percorre os registros marcados e grava na SA1
+@author Alfred Christian Andersen
+@since 30/07/2026
+@version 2.4
+@type Static Function
+/*/
+
+/*/{Protheus.doc} AFAT014processInformation
+    Função que percorre os registros marcados e realiza as alterações na SA1 e SA3
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 8/4/2026
+/*/
+Static Function AFAT014processInformation()
+    Local aArea         := FWGetArea() As Array
+    Local cMarca        := oMarkBrowse:Mark() As Character
+    Local nCurrent      := 0 As Numeric
+    Local nTotal        := 0 As Numeric
+    Local nCheckedTotal := 0 As Numeric
+    Local cNewAtend     := "" As Character
+    Local cNewNome      := "" As Character
+    Local cCodCli       := "" As Character
+    Local cLojaCli      := "" As Character
+
+    DbSelectArea(cAliasTmp)
+    (cAliasTmp)->(DbGoTop())
+    Count To nTotal
+    ProcRegua(nTotal)
+
+    cNomVend := Alltrim(cNomVend)
+
+    (cAliasTmp)->(DbGoTop())
+    While ! (cAliasTmp)->(EoF())
+        nCurrent++
+        IncProc('Analisando registro ' + cValToChar(nCurrent) + ' de ' + cValToChar(nTotal) + '...')
+
+        If oMarkBrowse:IsMark(cMarca)
+            nCheckedTotal++
+
+            cCodCli   := Alltrim((cAliasTmp)->A1_COD)
+            cLojaCli  := Alltrim((cAliasTmp)->A1_LOJA)
+            cNewAtend := Alltrim((cAliasTmp)->NEW_XTELE)
+            cNewNome  := Alltrim((cAliasTmp)->NEW_ATEND)
+
+            DbSelectArea("SA1")
+            SA1->(DbSetOrder(1))
+            If SA1->(DbSeek(xFilial("SA1") + cCodCli + cLojaCli))
+                RecLock("SA1", .F.)
+                    SA1->A1_VEND    := cCodVend
+                    SA1->A1_NOMVEND := cNomVend
+
+                    If !Empty(cNewAtend)
+                        SA1->A1_XTELEVE := cNewAtend
+                        SA1->A1_ATEND   := cNewNome
+                    End
+                SA1->(MsUnlock())
+            EndIf
+        EndIf
+
+        (cAliasTmp)->(DbSkip())
+    EndDo
+
+    If nCheckedTotal > 0 
+
+        //Chama a rotina de atualização Full do Vendedor
+        AFAT014UpdateVendor()
+
+        FWAlertSuccess(cValToChar(nCheckedTotal) + ' registros processados com sucesso!', 'SUCCESS')
+        
+        // >>> ENCERRA O DIÁLOGO APÓS O PROCESSAMENTO <<<
+        oDialogMark:End()
+    Else
+        FWAlertWarning("Não foram identificados marcações para o processamento das alterações.", "WARNING")
+    End
+
+    FWRestArea(aArea)
+Return
+
+/*/{Protheus.doc} AFAT014UpdateVendor
+    Atualiza o legado para as novos dados
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 8/4/2026
+/*/
+Static Function AFAT014UpdateVendor()
+
+	Local cUpdate as Character
+	Local nUpdate as Numeric
+
+	cUpdate := ""
+	nUpdate := 0
+
+	cUpdate := " UPDATE SA1010"
+	cUpdate += " SET A1_NOMVEND = " + ValToSql(cNomVend)
+	cUpdate += " WHERE A1_VEND = " + ValToSql(cCodVend)
+	cUpdate += " AND SA1010.D_E_L_E_T_ = '' " 
+
+	cUpdate := UPPER(cUpdate)
+
+	nUpdate := TcSqlExec(cUpdate)
+
+	If (nUpdate < 0)
+		FWAlertError("LOG DO UPDATE SA1010: " + TCSQLError())
+	EndIf
+
+	cUpdate := ""
+	nUpdate := 0
+
+	cUpdate := " UPDATE SA3010"
+	cUpdate += " SET A3_NOME = " + ValToSql(cNomVend)
+	cUpdate += " WHERE A3_COD = " + ValToSql(cCodVend)
+	cUpdate += " AND SA3010.D_E_L_E_T_ = '' " 
+
+	cUpdate := UPPER(cUpdate)
+
+	nUpdate := TcSqlExec(cUpdate)
+
+	If (nUpdate < 0)
+		FWAlertError("LOG DO UPDATE SA3010: " + TCSQLError())
+	EndIf
+
+Return
+
+/*/{Protheus.doc} AFAT014SalvaDado
+    Salva o dado editado na célula do browse
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 8/4/2026
+/*/
+Static Function AFAT014SalvaDado( oBrw, nCol, cValid )
+    Local lRet := .T.
+    Local nRecNo := 0
+
+    nRecNo := (cAliasTmp)->(RecNo())
+    If nRecNo <= 0
+        Return .F.
+    EndIf
+
+    (cAliasTmp)->( DbGoTo( nRecNo ) )
+
+    If oBrw:ForceValid( cValid )
+        RecLock( cAliasTmp, .F. )
+            If nCol == 6 // Posição da coluna NEW_XTELE no array
+                (cAliasTmp)->NEW_XTELE := oBrw:aColumns[nCol]:VarRef()
+                (cAliasTmp)->NEW_ATEND := Posicione("SU7", 1, xFilial("SU7") + (cAliasTmp)->NEW_XTELE, "U7_NOME")
+            EndIf
+        (cAliasTmp)->( DbUnLock() )
+        oBrw:Refresh()
+    Else
+        lRet := .F.
+    EndIf
+Return lRet
+
+/*/{Protheus.doc} AFAT014SetAtend
+    Função acionada pelo botão "Definir Atendente"
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 8/4/2026
+/*/
+User Function AFAT014SetAtend()
+    Processa({|| AFAT014SetAtendimento()}, 'Processando...')
+Return
+
+/*/{Protheus.doc} AFAT014SetAtendimento
+    Posiciona a temporária na linha focada e abre digitação do novo atendente
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 8/4/2026
+/*/
+Static Function AFAT014SetAtendimento()
+    Local nRecNo    := (cAliasTmp)->(RecNo())         as Numeric
+    Local cNewVal   := Space(TamSx3("A1_XTELEVE")[1]) as Character
+    Local cNewAtend := ""                             as Character
+    Local lConfirm  := .F.                            as Logical
+    Local oDlgInput                                   as Object
+    Local oGetInput                                   as Object
+    Local oBtnOk                                      as Object
+    Local oBtnCan                                     as Object
+    Local oGetNom                                     as Object
+
+    // Valida se há uma linha posicionada válida
+    If nRecNo <= 0 .Or. (cAliasTmp)->(EoF()) .Or. (cAliasTmp)->(BoF())
+        FWAlertInfo("Selecione (clique) uma linha da grade antes de definir o atendente.", "Atenção")
+        Return
+    EndIf
+
+    (cAliasTmp)->( DbGoTo(nRecNo) )
+
+    // Preenche com valor atual
+    cNewVal := If(!Empty((cAliasTmp)->NEW_XTELE), (cAliasTmp)->NEW_XTELE, (cAliasTmp)->A1_XTELEVE)
+    cNewAtend := ""
+
+    // TDialog:New(nTop, nLeft, nBottom, nRight, cTitle, ...)
+    oDlgInput := TDialog():New(100, 100, 250, 600, "Novo Atendente", , , , , , , , , .T.)
+
+    @ 010, 010 SAY "Informe o código:" SIZE 300, 020 OF oDlgInput PIXEL
+
+    @ 020, 010 MsGet oGetInput Var cNewVal Size 50, 010 Of oDlgInput Pixel Valid {|uVal| ExistCpo('SU7', cNewVal), AFAT014newAtendente(@cNewVal, @cNewAtend, oGetNom)} F3 "SU7"
+
+    @ 020, 065 MsGet oGetNom Var cNewAtend Size 150, 010 Of oDlgInput Pixel When .F.
+
+    // Botão OK
+    oBtnOk := TButton():New(040, 100, "Confirmar", oDlgInput, {|| lConfirm := .T., oDlgInput:End()}, 060, 020, , , .F., .T., , , .F.)
+
+    // Botão Cancelar
+    oBtnCan := TButton():New(040, 170, "Cancelar", oDlgInput, {|| lConfirm := .F., oDlgInput:End()}, 060, 020, , , .F., .T., , , .F.)
+
+    oDlgInput:Activate(,,,,,,)
+
+    // Se confirmou e digitou algo válido
+    If lConfirm .And. !Empty(cNewVal)
+        If !ExistCpo('SU7', cNewVal)
+            FWAlertInfo("Atendente não cadastrado.", "Atenção")
+            Return
+        EndIf
+
+        RecLock( cAliasTmp, .F. )
+            (cAliasTmp)->NEW_XTELE := cNewVal
+            (cAliasTmp)->NEW_ATEND := Posicione("SU7", 1, xFilial("SU7") + cNewVal, "U7_NOME")
+        (cAliasTmp)->( DbUnLock() )
+
+        oMarkBrowse:Refresh()
+    EndIf
+Return
+
+/*/{Protheus.doc} AFAT014newAtendente
+Funão auxiliar o Dialog da função AFAT014SetAtendimento
+@type function
+@version 1.0
+@author Alfred Andersen
+@since 8/4/2026
+/*/
+Static Function AFAT014newAtendente(cNewVal, cNewAtend, oGetNom)
+
+    Local lRet := .F. as Logical
+    
+    DbSelectArea("SU7")
+    SU7->(DbSetOrder(1)) 
+    
+    If SU7->(DbSeek(xFilial("SU7") + cNewVal))
+        cNewAtend := SU7->U7_NOME 
+        oGetNom:Refresh()
+        lRet := .T.
+    Else
+        Help("", 1, "ATENDNOTFOUND",, "Atendente não cadastrado.", 1, 0)
+    EndIf
+
+Return lRet
