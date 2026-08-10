@@ -74,7 +74,8 @@ Static Function ReportDef()
 					STR0011,;	//"Por Banco"
 					STR0012,;	//"Fornecedor"
 					STR0013,;	//"Por Emissao"
-					STR0014}	//"Por Cod.Fornec."
+					STR0014,;
+					"Por Valor"}	//"Por Cod.Fornec."
 
 	__lMetric       := FwLibVersion() >= "20210517"
 
@@ -665,6 +666,12 @@ Static Function ReportPrint(oReport)
 		cCond1 := "SE2->E2_FORNECE <= MV_PAR12"
 		cCond2 := "SE2->E2_FORNECE"
 		cTitulo += STR0020 //" - Por Cod.Fornecedor"
+	ElseIf nOrdem == 8
+		oFINR150:AddIndex("1", {"E2_FILIAL", "E2_VALOR", "E2_PREFIXO", "E2_NUM", "E2_PARCELA", "E2_TIPO", "E2_FILORIG"})
+		cOrder := SQLOrder("E2_FILIAL+E2_VALOR")
+		cCond1 := "SE2->E2_VALOR > 0"
+		cCond2 := "SE2->E2_VALOR"
+		cTitulo += " - Por Valor" //" - Por Valor"
 	Else
 		oFINR150:AddIndex("1", {"E2_FILIAL", "E2_NOMFOR", "E2_FORNECE", "E2_LOJA", "E2_PREFIXO", "E2_NUM", "E2_PARCELA", "E2_TIPO", "E2_FILORIG"})
 		cOrder := SQLOrder("E2_FILIAL+E2_NOMFOR+E2_FORNECE+E2_LOJA+E2_PREFIXO+E2_NUM+E2_PARCELA+E2_TIPO")
