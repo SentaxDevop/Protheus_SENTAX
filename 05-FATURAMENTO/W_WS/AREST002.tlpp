@@ -312,8 +312,7 @@ method BuildJson() class JsonVendas
                 F2_DOC                                                                    AS Numero_Nota_Fiscal,
                 RTRIM(F2_CHVNFE)                                                          AS Chave_NFE,
                 CASE
-                    WHEN B1_CODGTIN <> '' THEN B1_CODGTIN 
-                    WHEN B1_CODBAR <> '' THEN B1_CODBAR 
+                    WHEN B5_CODCLI <> '' THEN B5_CODCLI
                     ELSE B1_COD
                 END                                                                       AS EAN,
                 RTRIM(B1_COD)                                                             AS Cod_interno,
@@ -334,13 +333,16 @@ method BuildJson() class JsonVendas
                         END
                     ELSE '1'
                 END                                                                       AS Fator_Para_Pacote,
-                CASE
-                    WHEN F2_TIPO = 'N' AND F2_STATUS IN ('C','D') THEN 'DB'
-                    WHEN F2_TIPO = 'N'                            THEN 'F'
-                    WHEN F2_TIPO = 'D'                            THEN 'D'
-                    WHEN F2_TIPO = 'B'                            THEN 'B'
-                END                                                                       AS Tipo_Documento,
-                'R'                                                                       AS Tipo_Envio,       
+                CASE 
+                    WHEN F4_DUPLIC = 'S' THEN 'N'
+                    WHEN F4_DUPLIC = 'N' THEN 'B'
+                    ELSE 'F' 
+                END                                                                         AS Tipo_Documento,
+                CASE 
+                    WHEN F4_DUPLIC = 'S' THEN 'R'
+                    WHEN F4_DUPLIC = 'N' THEN 'M'
+                    ELSE 'R' 
+                END                                                                         AS Tipo_Envio,       
                 D2_TOTAL                                                                  AS VendaBruta,  
                 D2_CUSTO1                                                                 AS VendaLiquida,
                 D2_QUANT                                                                  AS VendaUnidades,
@@ -384,7 +386,7 @@ method BuildJson() class JsonVendas
                 %Table:SB1% SB1 (NOLOCK)
                 ON  B1_COD     = D2_COD
                 AND (
-                    B1_GRUPO BETWEEN '0402' AND '0410'
+                    B1_GRUPO BETWEEN '0401' AND '0410'
                 OR B1_GRUPO BETWEEN '0421' AND '0499'
                 )
                 //AND B1_MSBLQL = '2'
@@ -400,7 +402,7 @@ method BuildJson() class JsonVendas
             %Table:SF4% SF4 (NOLOCK)
                 ON F4_FILIAL = SUBSTRING(D2_FILIAL,1,4) 
                 AND F4_CODIGO = D2_TES 
-                AND F4_DUPLIC = 'S' 
+                //AND F4_DUPLIC = 'S' 
                 AND SF4.%NotDel%
 
             LEFT JOIN 
@@ -414,14 +416,20 @@ method BuildJson() class JsonVendas
                 ON A3_COD = C5_VEND1 
                 AND SA3.%NotDel%
 
+            LEFT JOIN 
+                %Table:SB5% SB5 (NOLOCK)
+                    ON B5_FILIAL = B1_FILIAL 
+                    AND B5_COD = B1_COD
+                    AND SB5.%NotDel%
+
             WHERE
                 SF2.%NotDel%
                 AND F2_FILIAL  = %xFilial:SF2%
                 AND F2_EMISSAO BETWEEN %Exp:Self:cDataDe% AND %Exp:Self:cDataAte%
-                AND F2_TIPO IN ('N')
+                AND F2_TIPO = 'N'
+                AND F2_SERIE <> '2'
                 AND F2_CLIENTE NOT IN %Exp:cClient% 
                 //and F2_DOC = '000105398'
-
 
     UNION ALL
 
@@ -432,8 +440,7 @@ method BuildJson() class JsonVendas
             F1_DOC                                           AS Numero_Nota_Fiscal,
             F1_CHVNFE                                        AS Chave_NFE,
             CASE 
-                WHEN B1_CODGTIN <> '' THEN B1_CODGTIN 
-                WHEN B1_CODBAR <> '' THEN B1_CODBAR 
+                WHEN B5_CODCLI <> '' THEN B5_CODCLI 
                 ELSE B1_COD END                              AS EAN,
             B1_COD                                           AS Cod_interno,
             B1_DESC                                          AS Nome_Produto,
@@ -453,8 +460,16 @@ method BuildJson() class JsonVendas
                     END  
                 ELSE '1' 
                 END                                          AS Fator_Para_Pacote,
-            'D'                                              AS Tipo_Documento,
-            'R'                                              AS Tipo_Envio,
+            CASE 
+                WHEN F4_DUPLIC = 'S' THEN 'D'
+                WHEN F4_DUPLIC = 'N' THEN 'DB'
+                ELSE 'D'
+            END                                                 AS Tipo_Documento,
+            CASE 
+                WHEN F4_DUPLIC = 'S' THEN 'R'
+                WHEN F4_DUPLIC = 'N' THEN 'M'
+                ELSE 'R'
+            END                                                 AS Tipo_Envio,
             D1_TOTAL                                         AS VendaValorBruta,
             D1_VUNIT                                         AS VendaValorLiquida,
             D1_QUANT                                         AS VendaUnidades,
@@ -497,7 +512,7 @@ method BuildJson() class JsonVendas
         INNER JOIN 
             %Table:SB1% SB1 (NOLOCK) 
                 ON B1_COD = D1_COD 
-                AND (B1_GRUPO BETWEEN '0402' AND '0410' 
+                AND (B1_GRUPO BETWEEN '0401' AND '0410' 
                     OR 
                     B1_GRUPO BETWEEN '0421' AND '0499')
                 //AND B1_MSBLQL = '2'
@@ -514,7 +529,7 @@ method BuildJson() class JsonVendas
             %Table:SF4% SF4 (NOLOCK)
                 ON F4_FILIAL = SUBSTRING(D1_FILIAL,1,4) 
                 AND F4_CODIGO = D1_TES 
-                AND F4_DUPLIC = 'S' 
+                //AND F4_DUPLIC = 'S' 
                 AND SF4.%NotDel%
 
         LEFT JOIN 
@@ -528,10 +543,16 @@ method BuildJson() class JsonVendas
                 ON A3_COD = C5_VEND1 
                 AND SA3.%NotDel%
 
+        LEFT JOIN 
+            %Table:SB5% SB5 (NOLOCK)
+                ON B5_FILIAL = B1_FILIAL 
+                AND B5_COD = B1_COD
+                AND SB5.%NotDel%
+
         WHERE SF1.%NotDel%
             AND F1_FILIAL = %xFilial:SF1%
             AND F1_EMISSAO BETWEEN %Exp:Self:cDataDe% AND %Exp:Self:cDataAte%
-            AND F1_TIPO IN ('D')
+            AND F1_TIPO = 'D'
             AND F1_FORNECE NOT IN %Exp:cClient% 
 
         ) AS BASE
@@ -686,7 +707,7 @@ method BuildJson() class JsonEstoque
         WHERE 
             SB1.%NotDel%
             AND (
-                B1_GRUPO BETWEEN '0402' AND '0410'
+                B1_GRUPO BETWEEN '0401' AND '0410'
             OR B1_GRUPO BETWEEN '0421' AND '0499'
             )
             //AND B1_MSBLQL = '2'
