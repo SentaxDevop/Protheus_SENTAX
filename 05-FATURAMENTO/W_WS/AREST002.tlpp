@@ -659,10 +659,9 @@ method BuildJson() class JsonEstoque
             M0_CGC                                                  AS CNPJ_Filial_Distribuidor , 
             '16404287091959'                                        AS CNPJ_Industria ,
             CONVERT(VARCHAR(8), GETDATE(), 112)                     AS Data_Posicao,
-            CASE 
-                WHEN B1_CODGTIN <> '' THEN B1_CODGTIN
-                ELSE B1_COD
-                END                                                 AS EAN,
+           CASE 
+               WHEN B5_CODCLI <> '' THEN B5_CODCLI 
+               ELSE B1_COD END                                      AS EAN,
             B1_CODBAR                                               AS DUN, //analisar
             B1_COD                                                  AS Cod_interno,
             ''                                                      AS Cod_Lote, 
@@ -704,6 +703,13 @@ method BuildJson() class JsonEstoque
             AND B2_COD = B1_COD 
             AND B2_LOCAL = '01' 
             AND SB2.%NotDel%
+
+        LEFT JOIN 
+            %Table:SB5% SB5 (NOLOCK)
+                ON B5_FILIAL = B1_FILIAL 
+                AND B5_COD = B1_COD
+                AND SB5.%NotDel%
+                
         WHERE 
             SB1.%NotDel%
             AND (
