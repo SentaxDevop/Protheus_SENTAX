@@ -258,7 +258,7 @@ Static Function ReportDef()
 
     //Secao 1 --> Analitico
     oSection1 := TRSection():New(oReport,STR0079,{"SE1","SA1"},;
-                    {STR0008,STR0009,STR0010,STR0011,STR0012,STR0013,STR0014,STR0015,STR0016,STR0047})
+                    {STR0008,STR0009,STR0010,STR0011,STR0012,STR0013,STR0014,STR0015,STR0016,STR0047,"Por Valor"})
     //Secao 2 --> Sintetico
     oSection2 := TRSection():New(oReport,STR0081)
     TRCell():New(oSection1,"CLIENTE",,STR0056,,nTamCli,.F.,,,,,,,.F.)  //"Codigo-Lj-Nome do Cliente"
@@ -767,6 +767,9 @@ Static Function ReportPrint(oReport)
         oBreak := TRBreak():New(oSection1, {||SE1->E1_FILIAL + IIf(MV_PAR40=2,DtoC(SE1->E1_VENCTO)+SE1->E1_PORTADO+SE1->E1_AGEDEP+SE1->E1_CONTA,DtoC(SE1->E1_VENCREA)+SE1->E1_PORTADO+SE1->E1_AGEDEP+SE1->E1_CONTA)},;
         {||STR0037 + DtoC(dDtVenc) + IIf(!Empty(cNumBco), " - " + STR0066 + " " + cNumBco + " " + ;
         GetAdvfVal("SA6","A6_NOME",FwxFilial("SA6") + AllTrim(cNumBco),1),"")},.F.,"",.F.)
+    ElseIf nOrdem == 11 // VALOR
+        oBreak := TRBreak():New(oSection1, {|| SE1->E1_FILIAL + Str(SE1->E1_VALOR,17,2)}, {|| "S U B - T O T A L   P O R   V A L O R ---->"})
+   
     Endif
 
     //旼컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴커
@@ -975,6 +978,12 @@ Static Function ReportPrint(oReport)
         cCond1	:= "SE1->E1_NUM <= mv_par06"
         cCond2	:= "SE1->E1_NUM"
         cTitulo	+= STR0048 //" - Numero/Prefixo"
+	ElseIf nOrdem == 11
+        oFINR130:AddIndex("2", {"E1_FILIAL", "E1_VALOR", "E1_PREFIXO", "E1_NUM", "E1_PARCELA", "E1_TIPO", "E1_FILORIG"})
+		cOrder := SQLOrder("E1_FILIAL+E1_VALOR")
+		cCond1 := "SE1->E1_VALOR > 0"
+		cCond2 := "SE1->E1_VALOR"
+		cTitulo += " - Por Valor" //" - Por Valor"
     EndIf
 
     oFINR130:AddIndex("3", {"E1RECNO", "E5DTDISPO", "E5DTDIGIT"})
@@ -2494,6 +2503,9 @@ ElseIf nOrdem = 9
     cCodCart := SubStr(cCarAnt,__nTamPort+1,1)
     cCarteira := Situcob(cCodCart)
     cQuebra := SA6->A6_COD + " " + SA6->A6_NREDUZ + " " + SubStr(cCarteira,1,20) + " " + Iif(lConFilAbx,cFilAnt + " - " + cFilName,"")
+ElseIf nOrdem == 11 // POR VALOR
+    cQuebra := "Valor: " + Transform(Val(cCarAnt), "@E 999,999,999,999.99") + " " + Iif(lConFilAbx,cFilAnt + " - " + cFilName,"")
+
 Endif
 
 if !lImpSintTbl
