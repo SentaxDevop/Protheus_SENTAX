@@ -334,7 +334,7 @@ method BuildJson() class JsonVendas
                     ELSE '1'
                 END                                                                       AS Fator_Para_Pacote,
                 CASE 
-                    WHEN F4_DUPLIC = 'S' THEN 'N'
+                    WHEN F4_DUPLIC = 'S' THEN 'F'
                     WHEN F4_DUPLIC = 'N' THEN 'B'
                     ELSE 'F' 
                 END                                                                         AS Tipo_Documento,
@@ -427,7 +427,7 @@ method BuildJson() class JsonVendas
                 AND F2_FILIAL  = %xFilial:SF2%
                 AND F2_EMISSAO BETWEEN %Exp:Self:cDataDe% AND %Exp:Self:cDataAte%
                 AND F2_TIPO = 'N'
-                AND F2_SERIE <> '2'
+                //AND F2_SERIE <> '2'
                 AND F2_CLIENTE NOT IN %Exp:cClient% 
                 //and F2_DOC = '000105398'
 
