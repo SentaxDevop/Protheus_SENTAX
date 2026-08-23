@@ -18,7 +18,7 @@ If !IsBLind()
             Public _cMotBx  := ""
             Public _cFilAnt := ""
         Else
-            If cFilAnt <> _cFilAnt
+            If Substring(cFilAnt,1,4) <> Substring(_cFilAnt,1,4)
                 cBanco      := ''
                 cAgencia    := ''
                 cConta      := ''
