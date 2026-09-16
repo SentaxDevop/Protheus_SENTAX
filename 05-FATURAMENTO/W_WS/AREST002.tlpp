@@ -322,7 +322,7 @@ method BuildJson() class JsonVendas
                     WHEN B1_UM = 'PC' THEN 'PC'
                     WHEN B1_UM = 'CX' THEN 'CX'
                     WHEN B1_UM = 'UN' THEN 'UN'
-                    WHEN B1_UM = 'FD' THEN 'UN'
+                    WHEN B1_UM = 'FD' THEN 'CX'
                     ELSE 'OT'
                 END                                                                       AS Unidade_Venda,
                 CASE B1_UM
@@ -449,7 +449,7 @@ method BuildJson() class JsonVendas
                 WHEN B1_UM = 'PC' THEN 'PC'
                 WHEN B1_UM = 'CX' THEN 'CX'
                 WHEN B1_UM = 'UN' THEN 'UN'
-                WHEN B1_UM = 'FD' THEN 'UN'
+                WHEN B1_UM = 'FD' THEN 'CX'
                 ELSE 'OT'
             END                                             AS Unidade_Venda,
             CASE B1_UM 
@@ -672,7 +672,7 @@ method BuildJson() class JsonEstoque
                 WHEN B1_UM = 'PC' THEN 'PC'
                 WHEN B1_UM = 'CX' THEN 'CX'
                 WHEN B1_UM = 'UN' THEN 'UN'
-                WHEN B1_UM = 'FD' THEN 'UN'
+                WHEN B1_UM = 'FD' THEN 'CX'
                 ELSE 'OT'
             END                                                     AS Unidade_Venda,
             CASE B1_UM 
