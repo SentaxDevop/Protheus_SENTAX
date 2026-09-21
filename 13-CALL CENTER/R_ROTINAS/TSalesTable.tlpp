@@ -19,6 +19,8 @@ Class TSalesTable
 	Public Method Process()
     Public Method DeleteRecords()
     Public Method InsertRecords()
+    Public Method ZZ3Delete()
+    Public Method ZZ3Insert()
 
 EndClass
 
@@ -49,6 +51,11 @@ Method Process() Class TSalesTable
 
 	ConOut("Chamada de Insercao da tabela VENDAS na data: "	+	DTOC(::cDataLimite) + "	Inicio " + DTOC(dDatabase) + " - " + TIME())
 	::InsertRecords()
+
+	//Nova tabela para inserção dos dados 
+	::ZZ3Delete()
+
+	::ZZ3Insert()
 
 Return
 
@@ -625,6 +632,147 @@ Method InsertRecords() Class TSalesTable
 	EndIf
 
 	ConOut("Finalizado: InsertRecords " + "Data " + DTOC(dDatabase) + " - " + TIME())
+
+Return
+
+Method ZZ3Delete() Class TSalesTable
+
+	Local cUpdate as Character
+	Local nUpdate as Numeric
+
+	cUpdate := ""
+	nUpdate := 0
+
+	cUpdate := " DELETE ZZ3010"
+	cUpdate += " WHERE ZZ3_EMISSA >= " + ValToSql(DTOS(::cDataLimite))
+
+	cUpdate := UPPER(cUpdate)
+
+	nUpdate := TcSqlExec(cUpdate)
+
+	If (nUpdate < 0)
+		ConOut("LOG DO UPDATE: " + TCSQLError())
+	EndIf
+
+	ConOut("Finalizado: ZZ3Delete ")
+
+Return
+
+Method ZZ3Insert() Class TSalesTable
+
+	Local cInsert as Character
+	Local nInsert as Numeric
+
+	cInsert := ""
+	nInsert := 0
+	
+	cInsert += "DECLARE @ProximoRecno INT = (SELECT ISNULL(MAX(R_E_C_N_O_), 0) FROM [dbo].[ZZ3010])	"
+
+	cInsert += "INSERT INTO [dbo].[ZZ3010]	"
+	cInsert += "    (ZZ3_FILIAL, ZZ3_EMISSA, ZZ3_NOTA, ZZ3_TIPONF, ZZ3_CODPRO, ZZ3_DESPRO,	"
+	cInsert += "     ZZ3_GRPROD, ZZ3_DESGRP, ZZ3_QUANTI, ZZ3_CFOP, ZZ3_TPPROD, ZZ3_REGIAO,	"
+	cInsert += "     ZZ3_CODMUN, ZZ3_MUN, ZZ3_UF, ZZ3_CODCLI, ZZ3_LOJA, ZZ3_HISTOR,	"
+	cInsert += "     ZZ3_CODVEN, ZZ3_NOMVEN, ZZ3_CODOPE, ZZ3_NOMOPE, ZZ3_VENUA1, ZZ3_NOMUA1,	"
+	cInsert += "     ZZ3_VENUA2, ZZ3_NOMUA2, ZZ3_TMK, ZZ3_VENDA, ZZ3_FRETE, ZZ3_DEVOLU,	"
+	cInsert += "     ZZ3_PERIPI, ZZ3_VALIPI, ZZ3_VLRST, ZZ3_VLRECB, ZZ3_PERICM, ZZ3_VALICM,	"
+ 	cInsert += "     ZZ3_VALPIS, ZZ3_VALCOF, ZZ3_VALDES, ZZ3_VLRECL, ZZ3_VLRCUS, ZZ3_VLMARB,	"
+	cInsert += "     ZZ3_PCUSTO, ZZ3_PLUCRO, ZZ3_NCM, ZZ3_TPCLI, ZZ3_IE, ZZ3_SUFRAM,	"
+	cInsert += "     ZZ3_GRPTRI, ZZ3_TPPESS, ZZ3_CNAE, ZZ3_SIMPLE, ZZ3_MT, ZZ3_NUMCTE,	"
+	cInsert += "     ZZ3_SERCTE, ZZ3_NQCTE, ZZ3_VALFRE, ZZ3_PEDIDO, ZZ3_ITEM, ZZ3_PRCVEN,	"
+	cInsert += "     ZZ3_NFORIG, ZZ3_DUPLIC, ZZ3_GERUA1, ZZ3_DIASME, ZZ3_DIASPA, ZZ3_META1,	"
+	cInsert += "     ZZ3_META2, ZZ3_B1PRO, ZZ3_NVEND2, ZZ3_REGVEN,	"
+	cInsert += "     D_E_L_E_T_, R_E_C_N_O_, R_E_C_D_E_L_,	"
+	cInsert += "     ZZ3_FORNEC, ZZ3_NGERE1, ZZ3_NGER01, ZZ3_GERUA2)	"
+	cInsert += "SELECT	"
+ 	cInsert += "     [COD_FIL]	"
+	cInsert += "     ,[EMISSAO]	"
+	cInsert += "     ,[NF]	"
+	cInsert += "     ,[TIPONF]	"
+	cInsert += "     ,[COD_PRODUTO]	"
+	cInsert += "     ,[PRODUTO]	"
+	cInsert += "     ,[GRPROD]	"
+	cInsert += "     ,[GRUPOPROD]	"
+	cInsert += "     ,[QUANTI]	"
+	cInsert += "     ,[CFOP]	"
+	cInsert += "     ,[TIPO]	"
+	cInsert += "     ,ISNULL([REGIAO], '')	"
+	cInsert += "     ,[COD_MUN]	"
+	cInsert += "     ,ISNULL([MUNIC], '')	"
+	cInsert += "     ,ISNULL([ESTADO], '')	"
+	cInsert += "     ,[COD_CLIENTE]	"
+	cInsert += "     ,[LOJA]	"
+	cInsert += "     ,ISNULL([HISTORICO], '')	"
+	cInsert += "     ,[COD_VEND]	"
+	cInsert += "     ,ISNULL([VENDEDOR], '')	"
+	cInsert += "     ,ISNULL([COD_OPERADOR], '')	"
+	cInsert += "     ,ISNULL([OPERADOR], '')	"
+	cInsert += "     ,ISNULL([VEND_UA1], '')	"
+	cInsert += "     ,ISNULL([NUAVEND1], '')	"
+	cInsert += "     ,ISNULL([VEND_UA2], '')	"
+	cInsert += "     ,ISNULL([NUAVEND2], '')	"
+	cInsert += "     ,ISNULL([TMK], '')	"
+	cInsert += "     ,ISNULL([VENDA], 0)	"
+	cInsert += "     ,ISNULL([FRETE], 0)	"
+	cInsert += "     ,ISNULL([DEVOLUCAO], 0)	"
+	cInsert += "     ,ISNULL([PIPI], 0)	"
+	cInsert += "     ,ISNULL([IPI], 0)	"
+	cInsert += "     ,ISNULL([ST], 0)	"
+	cInsert += "     ,ISNULL([RECEITA_BRUTA], 0)	"
+	cInsert += "     ,ISNULL([PICMS], 0)	"
+	cInsert += "     ,ISNULL([ICMS], 0)	"
+	cInsert += "     ,ISNULL([PIS], 0)	"
+	cInsert += "     ,ISNULL([COFINS], 0)	"
+	cInsert += "     ,ISNULL([DESCONTO], 0)	"
+	cInsert += "     ,ISNULL([RECEITA_LIQUIDA], 0)	"
+	cInsert += "     ,ISNULL([CUSTO], 0)	"
+	cInsert += "     ,ISNULL([MARGEM_BRUTA], 0)	"
+	cInsert += "     ,ISNULL([P_CUSTO], 0)	"
+	cInsert += "     ,ISNULL([P_LUCRO], 0)	"
+	cInsert += "     ,ISNULL([NCM], '')	"
+	cInsert += "     ,ISNULL([TIPOCLI], '')	"
+	cInsert += "     ,ISNULL([IE], '')	"
+	cInsert += "     ,ISNULL([SUFRAMA], '')	"
+	cInsert += "     ,ISNULL([GRPTRIB], '')	"
+	cInsert += "     ,ISNULL([TPESSOA], '')	"
+	cInsert += "     ,ISNULL([CNAE], '')	"
+	cInsert += "     ,ISNULL([SIMPLES], '')	"
+	cInsert += "     ,ISNULL([MT], '')	"
+	cInsert += "     ,[NUMCTE]	"
+	cInsert += "     ,ISNULL([SERCTE], '')	"
+	cInsert += "     ,[NQCTE]	"
+	cInsert += "     ,ISNULL([VALFRETE], 0)	"
+	cInsert += "     ,ISNULL([PEDIDO], '')	"
+	cInsert += "     ,ISNULL([ITEM], '')	"
+	cInsert += "     ,ISNULL([PRCVEN], 0)	"
+	cInsert += "     ,ISNULL([NOTAORIGEM], '')	"
+	cInsert += "     ,ISNULL([DUPLIC], '')	"
+	cInsert += "     ,ISNULL([GERENTEUA1], '')	"
+	cInsert += "     ,ISNULL(CAST([DIAS_MES] AS VARCHAR(50)), '')	"
+	cInsert += "     ,ISNULL(CAST([DIAS_PASSADOS] AS VARCHAR(50)), '')	"
+	cInsert += "     ,ISNULL(CAST([META_UA1] AS VARCHAR(50)), '')	"
+	cInsert += "     ,ISNULL(CAST([META_UA2] AS VARCHAR(50)), '')	"
+	cInsert += "     ,ISNULL([B1_PROC], '')	"
+	cInsert += "     ,ISNULL([NOME_VEND2], '')	"
+	cInsert += "     ,ISNULL([REGIAO_VEND], '')	"
+	cInsert += "     ,''	"//                                                    -- D_E_L_E_T_
+	cInsert += "     ,@ProximoRecno + ROW_NUMBER() OVER (ORDER BY COD_FIL, EMISSAO, NF)	"//  -- R_E_C_N_O_
+	cInsert += "     ,0	"//                                                      -- R_E_C_D_E_L_
+	cInsert += "     ,ISNULL([FORNECEDOR], '')	"
+	cInsert += "     ,ISNULL([NOMEGERENTEUA1], '')	"
+	cInsert += "     ,ISNULL([NOME_GERENTEUA1], '')	"
+	cInsert += "     ,ISNULL([GERENTE_UA2], '')	"
+	cInsert += "  FROM [dbo].[VENDAS]	"
+	cInsert += "WHERE EMISSAO >= " + ValToSql(DTOS(::cDataLimite))
+	//cInsert += "GO	"
+
+
+	nInsert := TcSqlExec(cInsert)
+
+	If (nInsert < 0)
+		ConOut("LOG DO UPDATE: " + TCSQLError())
+	EndIf
+
+	ConOut("Finalizado: ZZ3Insert ")
 
 Return
 
