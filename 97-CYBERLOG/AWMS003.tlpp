@@ -1,0 +1,31 @@
+/*/{Protheus.doc} AWMS003
+	Envio automático de clientes para o WMS
+	@type function
+	@version 1.0
+	@author Alfred Andersen
+	@since 9/20/2026
+/*/
+User Function AWMS003(aPars)
+
+	Local oObjeto as Object
+
+	aPars   := {"01","020201"}
+
+	RpcClearenv()
+
+	RpcSetType( 3 )
+	RpcSetEnv( aPars[1], aPars[2] )
+
+	Conout("ENVIO DE CLIENTES PARA WMS - Rotina: AWMS003 - Empresa|Filial [ " + aPars[1] + "|" + aPars[2] + " ] - Data|Hora ["+DTOC(DATE())+" - "+TIME()+"]")
+
+	oObjeto := TIntegracaoProtheusxWMSCyberlog():New()
+	oObjeto:sendCustomers()
+
+	FREEOBJ( oObjeto )
+
+	// Fecha todas as áreas de trabalho
+  	DBCloseAll()
+
+	RpcClearEnv()
+
+Return

@@ -28,6 +28,7 @@ Class TIntegracaoProtheusxWMSCyberlog
 	Public Method SendProductionOrder() //Envia as ordens de produção encerradas
 	Public Method Packinglist()
 	Public Method MovimentoInterno() //Processa envio do Movimento Interno gerado pela rotina de Desmontagem de Produtos
+	Public Method sendCustomers() //Processo automatizado da integração de Clientes
 
 EndClass
 
@@ -526,27 +527,6 @@ User Function PVtoWMS(aPars)
 
 	Conout("INICIANDO ENVIO DE PEDIDOS PARA O WMS. Rotina: PVtoWMS - Empresa|Filial [ " + aPars[1] + "|" + aPars[2] + " ] - Data|Hora ["+DTOC(DATE())+" - "+TIME()+"]")
 
-	/*
-		//Cleaner SC9
-		oObjeto:RemoveRegistrosDuplicadosSC9()
-
-		BeginSql Alias cAlias
-			SELECT 	C9_FILIAL,C5_EMISSAO, C9_PEDIDO, C9_ITEM, C9_CLIENTE, C9_LOJA, C9_PRODUTO, C9_XSTAWMS, C9_NFISCAL, C9_BLEST, C9_BLCRED,
-					SC9.R_E_C_N_O_ RECSC9, C5_TIPO, C5_VEND1
-			FROM %Table:SC9% SC9 (NOLOCK)
-				INNER JOIN %Table:SC5% SC5 (NOLOCK) ON C5_FILIAL = C9_FILIAL AND C5_NUM = C9_PEDIDO AND SC5.%notdel%
-				INNER JOIN %Table:SC6% SC6 (NOLOCK) ON C6_FILIAL = C9_FILIAL AND C6_NUM = C9_PEDIDO AND C6_ITEM = C9_ITEM AND SC6.%notdel%
-				INNER JOIN %Table:SF4% SF4 (NOLOCK) ON F4_FILIAL = SUBSTRING(C6_FILIAL,1,4) AND F4_CODIGO = C6_TES AND F4_ESTOQUE = 'S' AND SF4.%notdel%
-			WHERE C9_FILIAL = %Exp:aPars[2]%
-				And C5_EMISSAO >= '20230101'
-				AND C9_NFISCAL 	= ''
-				AND C9_BLEST 	= '' 
-				AND ((C5_VEND1 <> '510' AND C9_BLCRED = '') OR (C5_VEND1 = '510'))
-				AND C9_XSTAWMS	= ''
-				AND SC9.%notdel%
-				ORDER BY C9_FILIAL, C5_EMISSAO, C9_PEDIDO, C9_ITEM 
-		EndSql	
-	*/
 	BeginSql Alias cAlias
 		SELECT C5_FILIAL, C5_NUM,
 			C5_CLIENTE,
@@ -615,3 +595,68 @@ User Function PVtoWMS(aPars)
 	RpcClearEnv()
 
 Return
+
+Method sendCustomers() Class TIntegracaoProtheusxWMSCyberlog
+
+ 	Local cAlias as Character
+    Local aRet   as Array
+
+    cAlias := GetNextAlias()
+    aRet   := {}
+
+    If Select( cAlias ) <> 0
+		(cAlias)->( dbCloseArea() )
+	EndIf	
+
+    BeginSql Alias cAlias
+        SELECT 
+            R_E_C_N_O_ RECSA1
+        FROM 
+            %Table:SA1% SA1
+        WHERE SA1.%NOTDEL%
+            AND A1_CEP <> ''
+            AND A1_XSTAWMS IN ('','F')
+            AND A1_MSBLQL <> 1
+			AND A1_DTCAD >= '20250101'
+    EndSql	
+    
+    Count To nTotal
+
+    (cAlias)->( DbGoTop() )
+
+    While ! (cAlias)->( EOF() )
+
+        SA1->(DbGoto((cAlias)->RECSA1))
+
+        //Endpoint PESSOA é utilizado tendo em vista a replicação do Cliente para o cadastro de Fornecedor
+        aRet := U_fConJson(GetMv('FZ_WSWMS4'))
+
+        If aRet[1]
+
+            Conout("")
+            Conout("Cliente criado/atualizado no WMS --> " + SA1->A1_COD + "/" +  SA1->A1_LOJA)
+
+            RecLock("SA1",.F.)
+                SA1->A1_XSTAWMS := "E"
+                SA1->A1_XERPID  := "C"+Alltrim(SA1->A1_COD)+Alltrim(SA1->A1_LOJA)
+            MSUNLOCK()
+
+        Else
+
+            Conout("")
+            Conout("Cliente NAO criado/atualizado no WMS(ERRO) --> " + SA1->A1_COD + "/" +  SA1->A1_LOJA)
+            Conout(aRet[2])
+            Conout(aRet[3])
+
+            RecLock("SA1",.F.)
+                SA1->A1_XSTAWMS := "F"
+            MSUNLOCK()
+
+        Endif
+
+        aRet := {}
+
+        (cAlias)->( DbSkip() )
+    End
+
+Return(Self)
