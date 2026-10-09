@@ -14,21 +14,29 @@
 /*/  
 User Function M410STTS()
 
-	Local _nOper as Numeric
-	Local lRet   as Logical
-	Local lSFA   as Logical
-	Local lCRM   as Logical
-	Local cMsg   as Character
-	Local lRules as Logical
-	Local oRules as Object
+	Local _nOper               as Numeric
+	Local nTotGeral               as Numeric
+	Local lRet                 as Logical
+	Local lSFA                 as Logical
+	Local lCRM                 as Logical
+	Local cMsg                 as Character
+	Local lRules               as Logical
+	Local lCommission          as Logical
+	Local lMinimumValueLockout as Logical
+	Local lNot5And7            as Logical
+	Local oRules               as Object
 
-	_nOper := PARAMIXB[1]
-	lRet   := .T.
-	lSFA   := .F.
-	lCRM   := .F.
-	cMsg   := ""
-	lRules := GetNewPar("ST_RULE",.F.)
-	oRules := TSalesOrderBlockingByRules():New()
+	_nOper               := PARAMIXB[1]
+	lRet                 := .T.
+	lSFA                 := .F.
+	lCRM                 := .F.
+	lNot5And7            := (_nOper <> 5 .And. _nOper <> 7)
+	cMsg                 := ""
+	lRules               := GetNewPar("ST_RULE",.F.)
+	lCommission          := .F. //Regra bloqueada até a homologação das regras do projeto //_nOper <> 5 .And. _nOper <> 7 .And. !Empty(SC5->C5_TABELA)
+	lMinimumValueLockout := GetNewPar("ST_M410A",.T.) 
+	nTotGeral := 0
+	oRules               := TSalesOrderBlockingByRules():New()
 
 	//DESABILITADO VALIDAÇÃO FUNNAME PARA REALIZAÇÃO DO TESTE NA INCLUSÃO DO PEDIDO MANUAL
 	If Alltrim(FUNNAME()) <> 'RPC'
@@ -72,12 +80,36 @@ User Function M410STTS()
 	EndIf
 
 	//Novos bloqueios de regra do pedido de venda 
-	If _nOper <> 5 .And. _nOper <> 7 .And. lRules
+	If lNot5And7
 
-		oRules:cRequestNumber    := SC5->C5_NUM
-		oRules:cRequestFilial    := SC5->C5_FILIAL
-		oRules:cPaymentCondition := SC5->C5_CONDPAG
-		oRules:Process()
+		If lRules
+			oRules:cRequestNumber    := SC5->C5_NUM
+			oRules:cRequestFilial    := SC5->C5_FILIAL
+			oRules:cPaymentCondition := SC5->C5_CONDPAG
+			oRules:Process()
+		End
+		
+		//Tratamento de Comissão do Pedido de Venda
+		If lCommission
+			U_AFAT015(SC5->C5_NUM)
+		End
+
+		If lMinimumValueLockout .And. SC5->C5_TIPO == 'N'
+			
+			While SC6->(!Eof()) .AND. xFilial("SC6") == SC5->C5_FILIAL .AND. SC6->C6_NUM == SC5->C5_NUM
+				
+				nTotGeral += SC6->C6_VALOR	
+					
+				SC6->(dbSkip())
+			End
+
+			If nTotGeral < GetNewPar("ST_M410B",400.00)
+				Conout("Bloqueio de Pedido por Regra de Valor Mínimo: " + SC5->C5_NUM)
+				Reclock("SC5",.F.)
+					SC5->C5_BLQ = "1"
+				SC5->(MsUnlock())
+			End
+		End
 
 	End
 
