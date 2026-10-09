@@ -1,0 +1,32 @@
+#Include "TOTVS.CH"
+
+/*/{Protheus.doc} MT103EXC
+    PE para validação da exclusão do documento de entrada.
+    @type function
+    @version 1.0
+    @author Dirlei@afsouza
+    @since 03/05/2018
+/*/
+User Function MT103EXC()
+
+	Local aArea := GetArea() as Array
+	Local lRet  := .T.       as Logical
+	Local oObjICMS           as Object
+
+	// Atualiza o status do xml integrado
+	U_NFAC025(2)
+
+	/*
+	If SF1->F1_TIPO == "N"
+
+		oObjICMS := TICMSSTExclusion():New()
+		oObjICMS:cProcessName := "EXCLUSION OF INPUT INVOICE"
+		oObjICMS:Process()
+		
+	EndIf
+	*/
+
+    FreeObj(oObjICMS)
+	RestArea(aArea)
+
+Return lRet

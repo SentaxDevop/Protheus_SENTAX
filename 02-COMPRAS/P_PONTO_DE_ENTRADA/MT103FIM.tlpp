@@ -1,0 +1,93 @@
+#Include "TOTVS.CH"
+
+/*/{Protheus.doc} MT103FIM
+    O ponto de entrada MT103FIM encontra-se no final da função A103NFISCAL. 
+    @type function
+    @version 1.0
+    @author Alessandro Smaha
+    @since 10/12/2014 
+/*/
+User Function MT103FIM()                              
+
+	Local nOpcao            as Numeric
+	Local nConfirma         as Numeric
+	Local cNatDev           as Character
+	Local oObjICMS          as Object
+	Local oInsertTitle      as Object
+    Local lInclusion        as Logical
+    Local lClassification   as Logical
+    Local lExclusion        as Logical
+    Local lICMSSTExclusion  as Logical
+    Local lTitleProvisional as Logical
+
+	nOpcao            := PARAMIXB[1] // Opção Escolhida pelo usuario no aRotina 
+	nConfirma         := PARAMIXB[2] // Se o usuario confirmou a operação de gravação da NFE
+	cNatDev           := AllTrim(SuperGetMV("ST_NATDEV",.F.,"DEV./TROCA"))
+    lInclusion        := nOpcao == 3
+    lClassification   := nOpcao == 4
+    lExclusion        := nOpcao == 5
+    lICMSSTExclusion  := .F.
+    lTitleProvisional := Alltrim(SF1->F1_FORNECE) + Alltrim(SF1->F1_LOJA) $ GetNewPar("ST_103FIM","0050521")
+
+    If nConfirma == 1
+
+        If lInclusion
+            
+            If SF1->F1_TIPO $ "BD"
+
+                fTelaMsg()
+                U_MFAT006B( SF1->F1_DOC, SF1->F1_SERIE, SF1->F1_TIPO, SF1->F1_FORNECE, SF1->F1_LOJA, SF1->F1_XUSRDEV, SF1->F1_XMOTDEV, SF1->F1_FRETE, SF1->F1_XVALTRA ) 
+
+                //Gravar E1_NATUREZ
+                dbSelectArea("SE1")
+                SE1->(dbSetOrder(2))
+                If SE1->(dbSeek(xFilial("SE1") + SF1->F1_FORNECE + SF1->F1_LOJA + SF1->F1_SERIE + SF1->F1_DOC))
+                    RecLock("SE1",.F.)
+                        SE1->E1_NATUREZ := cNatDev
+                    SE1->(MsUnLock())			
+                End
+
+            End
+
+        End
+
+        If (lInclusion .Or. lClassification .Or. lExclusion ) .And. SF1->F1_TIPO == "N"
+
+            If lICMSSTExclusion
+                If lExclusion
+                    cProcesso := "EXCLUSION OF INPUT INVOICE"
+                Else
+                    cProcesso := "INCLUSION OF INPUT INVOICE"
+                End
+
+                oObjICMS := TICMSSTExclusion():New()
+                oObjICMS:cProcessName := cProcesso
+                oObjICMS:Process()
+            End
+
+            If lTitleProvisional
+                If !lExclusion
+                    If FWAlertYesNo("Nota elegível para reigstro de título a receber de reembolso para o fornecedor. Confirma?", "Reembolso Automático")
+                        oInsertTitle := TitleToReceiveProvisional():New()
+                        oInsertTitle:cOper      := "I"
+                        oInsertTitle:cNumero    := SF1->F1_DOC
+                        oInsertTitle:nValor     := SF1->F1_VALBRUT
+                        oInsertTitle:cHistorico := "Reembolso Automático NF: " + Alltrim(SF1->F1_DOC) + ", Série:" + Alltrim(SF1->F1_SERIE)
+                        oInsertTitle:Processa()
+                    End
+                Else
+                    oInsertTitle := TitleToReceiveProvisional():New()
+                    oInsertTitle:cOper   := "D"
+                    oInsertTitle:cNumero := SF1->F1_DOC
+                    oInsertTitle:Processa()
+                End
+            End
+            
+        EndIf
+
+    End
+
+    FreeObj(oObjICMS)
+    FreeObj(oInsertTitle)
+
+Return  

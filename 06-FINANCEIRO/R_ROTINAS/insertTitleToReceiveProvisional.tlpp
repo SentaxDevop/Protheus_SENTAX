@@ -1,0 +1,109 @@
+#INCLUDE "TOTVS.CH"
+#INCLUDE "TOPCONN.CH"
+#INCLUDE "FWMVCDEF.CH"
+
+/*/{Protheus.doc} TitleToReceiveProvisional
+Classe responsável pelo geração ou exclusão do título a receber gerado inicalmente via COMPRAS
+	@type class
+	@version 1.0
+	@author Alfred Andersen
+	@since 10/9/2026
+/*/
+Class TitleToReceiveProvisional
+
+	Public Data cPrefixo   as Character
+	Public Data cNumero    as Character
+	Public Data cParcela   as Character
+	Public Data cTipo      as Character
+	Public Data cNatureza  as Character
+	Public Data cCodCli    as Character
+	Public Data cLojaCli   as Character
+	Public Data cCNPJ      as Character
+	Public Data dEmissao   as Date
+	Public Data dVencto    as Date
+	Public Data nValor     as Numeric
+	Public Data cHistorico as Character
+	Public Data cOper      as Character
+
+	Public Method New() Constructor
+	Public Method Processa()
+
+EndClass
+
+Method New() Class TitleToReceiveProvisional
+
+	::cNumero    := ""
+	::cPrefixo   := PADR("REE" 		, (TamSX3("E1_PREFIXO")[1]))
+	::cParcela   := PADR("" 		, (TamSX3("E1_PARCELA")[1]))
+	::cTipo      := PADR("REE" 		, (TamSX3("E1_TIPO")[1]))
+	::cNatureza  := PADR("10101"	, (TamSX3("E1_NATUREZ")[1]))
+	::cCodCli    := PADR("061389" 	, (TamSX3("E1_CLIENTE")[1]))
+	::cLojaCli   := PADR("01" 		, (TamSX3("E1_LOJA")[1]))
+	::dEmissao   := dDataBase
+	::dVencto    := dDataBase + 30
+	::nValor     := 0
+	::cHistorico := ""
+	::cOper      := ""
+
+Return(Self)
+
+/*/{Protheus.doc} TitleToReceiveProvisional::Processa
+Método centralizador da Classe
+	@type method
+	@version 1.0
+	@author Alfred Andersen
+	@since 10/9/2026
+	@return variant, return_description
+/*/
+Method Processa() Class TitleToReceiveProvisional
+
+	Local aSE1 := {} as Array
+	Local nOpc := 0  as Numeric
+
+	Private lMSErroAuto := .F.
+
+	If ::cOper == "I" // INSERT
+
+		nOpc := 3
+
+		aAdd( aSE1, { "E1_PREFIXO" , ::cPrefixo    	, Nil } )
+		aAdd( aSE1, { "E1_NUM"     , ::cNumero   	, Nil } )
+		aAdd( aSE1, { "E1_PARCELA" , ::cParcela		, Nil } )
+		aAdd( aSE1, { "E1_TIPO"    , ::cTipo       	, Nil } )
+		aAdd( aSE1, { "E1_CLIENTE" , ::cCodCli		, Nil } )
+		aAdd( aSE1, { "E1_LOJA"    , ::cLojaCli		, Nil } )
+		aAdd( aSE1, { "E1_NATUREZ" , ::cNatureza   	, Nil } )
+		aAdd( aSE1, { "E1_EMISSAO" , ::dEmissao	    , Nil } )
+		aAdd( aSE1, { "E1_VENCTO"  , ::dVencto		, Nil } )
+		aAdd( aSE1, { "E1_VALOR"   , ::nValor  		, Nil } )
+		aAdd( aSE1, { "E1_HIST"    , ::cHistorico  	, Nil } )
+
+	ElseIf ::cOper == "D" // DELET
+
+		nOpc := 5
+
+		aAdd( aSE1, { "E1_PREFIXO" , ::cPrefixo    	, Nil } )
+		aAdd( aSE1, { "E1_NUM"     , ::cNumero   	, Nil } )
+		aAdd( aSE1, { "E1_PARCELA" , ::cParcela		, Nil } )
+		aAdd( aSE1, { "E1_TIPO"    , ::cTipo       	, Nil } )
+		aAdd( aSE1, { "E1_CLIENTE" , ::cCodCli		, Nil } )
+		aAdd( aSE1, { "E1_LOJA"    , ::cLojaCli		, Nil } )
+
+	EndIf
+
+	MSExecAuto( {|x,y| FINA040(x, y)}, aSE1, nOpc)
+
+	If lMSErroAuto
+
+		mostraErro()
+
+	Else
+		cMensagem := IF(nOpc == 3,"Inclusão","Exclusão") + " do título de reembolso realizado com sucesso! " + CRLF
+		cMensagem += "Prefixo: <strong>" 	+ Alltrim(SE1->E1_PREFIXO) 	+ "</strong>"  + CRLF
+		cMensagem += "Número: <strong>" 	+ Alltrim(SE1->E1_NUM) 		+ "</strong>"  + CRLF
+		cMensagem += "Tipo: <strong>" 		+ Alltrim(SE1->E1_TIPO) 	+ "</strong>"  + CRLF
+		cMensagem += "Cliente/Loja: <strong>" + Alltrim(SE1->E1_CLIENTE) + "/" + Alltrim(SE1->E1_LOJA) + "</strong></p>"
+		FWAlertSuccess( cMensagem, "[SUCCESS] - Reembolso Automático")
+	EndIf
+
+Return()
