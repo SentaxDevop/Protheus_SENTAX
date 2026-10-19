@@ -23,7 +23,6 @@ User Function AFAT014()
     Local xPar3       := StrTran(xPar1, ' ' , 'Z' )    as Character
     Local xPar4       := StrTran(xPar2, ' ' , 'Z' )    as Character
 
-    // === VALIDA√á√ÉO DE CAMPOS CUSTOMIZADOS ===
     If TamSx3('A1_XTELEVE')[1] == 0
         FWAlertError("Campo A1_XTELEVE n„o encontrado na SX3. Verifique o dicio·rio de dados.", "Erro AFAT014")
         FWRestArea(aArea)
