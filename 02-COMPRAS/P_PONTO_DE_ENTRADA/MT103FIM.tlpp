@@ -67,7 +67,7 @@ User Function MT103FIM()
 
             If lTitleProvisional
                 If !lExclusion
-                    If FWAlertYesNo("Nota elegível para reigstro de título a receber de reembolso para o fornecedor. Confirma?", "Reembolso Automático")
+                    If FWAlertYesNo("Nota elegível para registro de título a receber de reembolso para o fornecedor. Confirma?", "Reembolso Automático")
                         oInsertTitle := TitleToReceiveProvisional():New()
                         oInsertTitle:cOper      := "I"
                         oInsertTitle:cNumero    := SF1->F1_DOC
