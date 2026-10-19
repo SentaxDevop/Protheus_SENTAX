@@ -551,7 +551,8 @@ User Function PVtoWMS(aPars)
 			AND C9_NFISCAL 	= ''
 			AND C9_BLEST 	= ''
 			AND C9_BLCRED 	= ''
-			AND C5_XSTAWMS = ' '
+			AND C5_XSTAWMS 	= ''
+			AND C5_BLQ 		= ''
 			AND ((C5_VEND1 <> '510' AND C9_BLCRED = '') OR (C5_VEND1 = '510'))
 			AND SC5.%NOTDEL%
 		GROUP BY C5_FILIAL, C5_NUM,

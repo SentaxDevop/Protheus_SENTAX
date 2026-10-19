@@ -236,6 +236,7 @@ Static Function fQryPed()
 			AND C9_NFISCAL 	= ''
 			AND C9_BLEST 	= ''
 			AND C9_BLCRED 	= ''
+			AND C5_BLQ 		= ''
 			AND SC5.%NOTDEL%
 			%Exp:cWhere%
 		GROUP BY C5_FILIAL, C5_NUM,
