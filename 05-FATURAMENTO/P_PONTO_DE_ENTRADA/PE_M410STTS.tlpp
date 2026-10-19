@@ -15,7 +15,7 @@
 User Function M410STTS()
 
 	Local _nOper               as Numeric
-	Local nTotGeral               as Numeric
+	Local nTotGeral            as Numeric
 	Local lRet                 as Logical
 	Local lSFA                 as Logical
 	Local lCRM                 as Logical
@@ -25,6 +25,7 @@ User Function M410STTS()
 	Local lMinimumValueLockout as Logical
 	Local lNot5And7            as Logical
 	Local oRules               as Object
+	Local oMinimumValue        as Object
 
 	_nOper               := PARAMIXB[1]
 	lRet                 := .T.
@@ -95,22 +96,17 @@ User Function M410STTS()
 		End
 
 		If lMinimumValueLockout .And. SC5->C5_TIPO == 'N'
-			
-			While SC6->(!Eof()) .AND. xFilial("SC6") == SC5->C5_FILIAL .AND. SC6->C6_NUM == SC5->C5_NUM
-				
-				nTotGeral += SC6->C6_VALOR	
-					
-				SC6->(dbSkip())
-			End
 
-			If nTotGeral < GetNewPar("ST_M410B",400.00)
-				Conout("Bloqueio de Pedido por Regra de Valor Mínimo: " + SC5->C5_NUM)
-				Reclock("SC5",.F.)
-					SC5->C5_BLQ = "1"
-				SC5->(MsUnlock())
-			End
+			oMinimumValue := minimumValueControlInTheSalesOrder():New()
+			oMinimumValue:cBranch      := FWxFilial("SC6")
+			oMinimumValue:cOrderNumber := SC6->C6_NUM
+			oMinimumValue:Process()
+			
 		End
 
 	End
+
+	FreeObj(oRules)
+	FreeObj(oMinimumValue)
 
 Return Nil

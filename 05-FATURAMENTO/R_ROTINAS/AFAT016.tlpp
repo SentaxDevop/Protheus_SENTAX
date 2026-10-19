@@ -1,0 +1,81 @@
+#INCLUDE "TOTVS.CH"
+
+/*/{Protheus.doc} minimumValueControlInTheSalesOrder
+    Classe responsável pelo controle do bloqueio de pedidos abaixo do valor mínimo
+	@type class
+	@version 1.0
+	@author Alfred Andersen
+	@since 10/19/2026
+/*/
+Class minimumValueControlInTheSalesOrder
+
+	Public Data cBranch      as Character
+	Public Data cOrderNumber as Character
+
+	Public Method New() Constructor
+	Public Method Process()
+
+EndClass
+
+Method New() Class minimumValueControlInTheSalesOrder
+
+	::cBranch      := ""
+	::cOrderNumber := ""
+
+Return(Self)
+
+Method Process() Class minimumValueControlInTheSalesOrder
+
+    Local cAlias        := GetNextAlias()               as Character
+    Local nValueMinimum := GetNewPar("ST_M410B",400.00) as Numeric
+
+    If Select( cAlias ) <> 0
+		(cAlias)->( dbCloseArea() )
+	EndIf
+
+    BeginSql Alias cAlias
+        SELECT 
+            SUM(C6_VALOR) VALOR 
+        FROM 
+            %Table:SC6% SC6
+        INNER JOIN 
+            %Table:SF4% SF4 
+            ON F4_CODIGO = C6_TES 
+            AND F4_DUPLIC = 'S' 
+            AND SF4.%NotDel%
+        WHERE 
+            SC6.%NotDel%
+            AND C6_FILIAL = %Exp:self:cBranch%
+            AND C6_NUM = %Exp:self:cOrderNumber%
+            AND NOT EXISTS (
+                SELECT 
+                    1
+                FROM 
+                    %Table:SA1% SA1
+                INNER JOIN SYS_COMPANY 
+                    ON M0_CGC = A1_CGC 
+                    AND SYS_COMPANY.%NotDel%
+                WHERE 
+                    SA1.%NotDel%
+                    AND A1_COD = SC6.C6_CLI 
+                    AND A1_LOJA = SC6.C6_LOJA
+                    )
+    EndSql
+
+    If !(cAlias)->( EOF() )
+
+        If (cAlias)->VALOR < nValueMinimum .And. (cAlias)->VALOR > 0
+
+            Conout("Bloqueio de Pedido por Regra de Valor Minimo: " + self:cOrderNumber)
+
+            Reclock("SC5",.F.)
+                SC5->C5_BLQ = "1"
+            SC5->(MsUnlock())
+
+        End
+
+    End
+
+    (cAlias)->( dbCloseArea() )
+
+Return()
