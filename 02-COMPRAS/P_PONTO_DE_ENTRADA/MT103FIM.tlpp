@@ -91,3 +91,67 @@ User Function MT103FIM()
     FreeObj(oInsertTitle)
 
 Return  
+
+Static Function fTelaMsg() 
+
+    Local aButtons := {}
+    Local oGetMot
+    Local cGetMot 	:= "" 
+    Local oGetVal
+    Local nGetVal 	:= 0
+    Local lRetOk	:= .F.
+    //Local oMotAlt  
+    Local nOpcx 	:= 0  
+    Static oDlg    
+
+    cGetMot := Padr(SF1->F1_MENNOTA,250)
+
+    DEFINE MSDIALOG oDlg TITLE "Devolução" FROM 000, 000  TO 160, 650 COLORS 0, 16777215 PIXEL STYLE DS_MODALFRAME // Cria Dialog sem o botão de Fechar.
+            
+        @ 035, 002 SAY oSayUser PROMPT "Usuário Autorizou Devolução: "+Alltrim(Upper(UsrFullName(RetCodUsr()))) SIZE 150, 007 OF oDlg COLORS 0, 16777215 PIXEL
+        @ 045, 002 SAY oSayValr PROMPT "Valor Transporte:" SIZE 050, 010 OF oDlg COLORS 0, 16777215 PIXEL
+        @ 055, 002 SAY oSayDesc PROMPT "Motivo da Devolução:" SIZE 100, 010 OF oDlg COLORS 0, 16777215 PIXEL
+        @ 043, 050 MSGET oGetVal VAR nGetVal SIZE 050, 010 PICTURE PesqPict("SF1","F1_XVALTRA") OF oDlg COLORS 0, 16777215 PIXEL HASBUTTON
+        @ 065, 002 MSGET oGetMot VAR cGetMot SIZE 300, 010 PICTURE "@!" VALID fValidMot(cGetMot,@lRetOk) OF oDlg COLORS 0, 16777215 PIXEL HASBUTTON
+    
+        oDlg:lEscClose     := .F. //Nao permite sair ao se pressionar a tecla ESC.
+
+        EnchoiceBar(oDlg, {|| nOpcx := 1, IIF(lRetOk,oDlg:End(),.F.) }, {|| nOpcx := 0 },,aButtons)
+
+    ACTIVATE MSDIALOG oDlg CENTERED
+        
+    cGetMot := Alltrim(cGetMot)  
+
+    If nOpcx == 1	// Motivo da Devolução
+        RecLock("SF1",.F.)
+            SF1->F1_XUSRDEV := RetCodUsr()	// Usuario Autorizou devolução
+            SF1->F1_XMOTDEV := cGetMot   
+            SF1->F1_XVALTRA := nGetVal
+        SF1->(MsUnLock())
+    EndIf			
+
+Return 
+
+//-------------------------------------------------------------------
+/*/{Protheus.doc} fValidMot() 
+Valida o motivo informado pelo usuário
+                
+@sample		fValidMot() 
+
+@author		Alessandro Smaha
+@since		02/02/2015 
+@version 	P11  
+/*/
+//------------------------------------------------------------------- 
+Static Function fValidMot(cGetMot,lRetOk)
+        
+    cGetMot := Alltrim(cGetMot) 
+
+    If Len(cGetMot) >= 10
+        lRetOk := .T.
+    Else
+        MsgAlert("O motivo da devolução deve ter no mínimo 10 caracteres!","Atenção")
+        lRetOk := .F.
+    EndIf
+
+Return
