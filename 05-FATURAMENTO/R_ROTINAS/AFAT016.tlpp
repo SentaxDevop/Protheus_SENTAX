@@ -40,7 +40,8 @@ Method Process() Class minimumValueControlInTheSalesOrder
             %Table:SC6% SC6
         INNER JOIN 
             %Table:SF4% SF4 
-            ON F4_CODIGO = C6_TES 
+            ON F4_FILIAL = SUBSTRING(C6_FILIAL,1,4)
+            AND F4_CODIGO = C6_TES 
             AND F4_DUPLIC = 'S' 
             AND SF4.%NotDel%
         WHERE 
@@ -69,7 +70,8 @@ Method Process() Class minimumValueControlInTheSalesOrder
             Conout("Bloqueio de Pedido por Regra de Valor Minimo: " + self:cOrderNumber)
 
             Reclock("SC5",.F.)
-                SC5->C5_BLQ = "1"
+                SC5->C5_BLQ     := "1"
+                SC5->C5_XLOGBLQ := "Bloqueio por Valor Minimo -" + DTOC(DATE()) + "-" + TIME()
             SC5->(MsUnlock())
 
         End
