@@ -28,6 +28,7 @@ Method Process() Class minimumValueControlInTheSalesOrder
 
     Local cAlias        := GetNextAlias()               as Character
     Local nValueMinimum := GetNewPar("ST_M410B",400.00) as Numeric
+    Local lBlock        := .F.                          as Logical
 
     If Select( cAlias ) <> 0
 		(cAlias)->( dbCloseArea() )
@@ -67,12 +68,30 @@ Method Process() Class minimumValueControlInTheSalesOrder
 
         If (cAlias)->VALOR < nValueMinimum .And. (cAlias)->VALOR > 0
 
-            Conout("Bloqueio de Pedido por Regra de Valor Minimo: " + self:cOrderNumber)
+            Conout("Bloqueio de Pedido por Regra de Valor Minimo: " + self:cOrderNumber + " - [minimumValueControlInTheSalesOrder]")
 
             Reclock("SC5",.F.)
                 SC5->C5_BLQ     := "1"
                 SC5->C5_XLOGBLQ := "Bloqueio por Valor Minimo -" + DTOC(DATE()) + "-" + TIME()
             SC5->(MsUnlock())
+
+            //Bloqueio dos Itens do Pedido de Venda
+            SC6->(dbSetOrder(1))
+            SC6->(dbSeek(FWxFilial("SC6") + self:cOrderNumber,.T.))
+            While SC6->(!Eof()) .and. SC6->C6_FILIAL == self:cBranch .and. SC6->C6_NUM == self:cOrderNumber
+                Begin Transaction
+                
+                    If RecLock("SC6")
+                        SC6->C6_BLOQUEI := "01"
+                        MsUnLock("SC6")
+                    Endif
+                    
+                End Transaction
+
+                SC6->(dbSkip())
+            Enddo
+
+            lBlock := .T.
 
         End
 
@@ -80,4 +99,4 @@ Method Process() Class minimumValueControlInTheSalesOrder
 
     (cAlias)->( dbCloseArea() )
 
-Return()
+Return(lBlock)

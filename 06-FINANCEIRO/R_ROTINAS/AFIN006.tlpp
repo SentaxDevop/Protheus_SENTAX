@@ -1,0 +1,71 @@
+#INCLUDE "TOTVS.CH"
+
+
+/*/{Protheus.doc} AFIN006
+    Consulta titulos vencidos do cliente com base em seu risco
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 10/25/2026
+    /*/
+User Function AFIN006(cCustomer, cStore)
+
+    Local aReturn := {}             as Array
+    Local aArea   := FwGetArea()    as Array
+    Local cAlias  := GetNextAlias() as Character
+
+    If Select( cAlias ) <> 0
+		(cAlias)->( dbCloseArea() )
+	EndIf
+
+    BeginSql Alias cAlias
+
+        SELECT 
+            E1_PREFIXO, 
+            E1_NUM, 
+            E1_PARCELA, 
+            E1_VENCREA
+        FROM 
+            %Table:SE1% SE1
+        INNER JOIN 
+            %Table:SA1% SA1
+                ON A1_COD = E1_CLIENTE 
+                AND A1_LOJA = E1_LOJA 
+                AND SA1.%NotDel%
+        WHERE SE1.%NotDel%
+            AND E1_CLIENTE = %Exp:cCustomer%
+            AND E1_LOJA = %Exp:cStore%
+            AND E1_SALDO > 0
+            AND E1_VENCTO < CONVERT(VARCHAR(8), 
+                                    DATEADD(DAY, 
+                                            - CAST((SELECT 
+                                                        TOP 1 X6_CONTEUD 
+                                                    FROM 
+                                                        %Table:SX6% SX6
+                                                    WHERE 
+                                                        SX6.X6_VAR = 'MV_RISCO' + RTRIM(SA1.A1_RISCO) 
+                                                        AND SX6.%NotDel%) 
+                                                    AS INT), 
+                                            CAST(%Exp:DTOS(dDataBase)% AS DATETIME)
+                                    ), 
+                                    112)
+        ORDER BY E1_NUM, E1_PARCELA
+
+    EndSql
+
+    While (cAlias)->(!EOF())
+
+       aAdd(aReturn,{(cAlias)->E1_PREFIXO, (cAlias)->E1_NUM, (cAlias)->E1_PARCELA, (cAlias)->E1_VENCREA})
+
+        (cAlias)->(DbSkip())
+    End
+
+    If Len(aReturn) > 0
+        FWLogMsg("INFO", , "CLIENTE COM TITULOS VENCIDOS", "AFIN006")
+    End
+
+    (cAlias)->(DbCloseArea())
+
+    FwRestArea( aArea)
+    
+Return aReturn

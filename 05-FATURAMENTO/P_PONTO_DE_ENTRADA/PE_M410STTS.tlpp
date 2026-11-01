@@ -15,28 +15,21 @@
 User Function M410STTS()
 
 	Local _nOper               as Numeric
-	Local nTotGeral            as Numeric
 	Local lRet                 as Logical
 	Local lSFA                 as Logical
-	Local lCRM                 as Logical
 	Local cMsg                 as Character
 	Local lRules               as Logical
 	Local lCommission          as Logical
-	Local lMinimumValueLockout as Logical
 	Local lNot5And7            as Logical
 	Local oRules               as Object
-	Local oMinimumValue        as Object
 
 	_nOper               := PARAMIXB[1]
 	lRet                 := .T.
 	lSFA                 := .F.
-	lCRM                 := .F.
 	lNot5And7            := (_nOper <> 5 .And. _nOper <> 7)
 	cMsg                 := ""
 	lRules               := GetNewPar("ST_RULE",.F.)
 	lCommission          := .F. //Regra bloqueada até a homologação das regras do projeto //_nOper <> 5 .And. _nOper <> 7 .And. !Empty(SC5->C5_TABELA)
-	lMinimumValueLockout := GetNewPar("ST_M410A",.T.) 
-	nTotGeral := 0
 	oRules               := TSalesOrderBlockingByRules():New()
 
 	//DESABILITADO VALIDAÇÃO FUNNAME PARA REALIZAÇÃO DO TESTE NA INCLUSÃO DO PEDIDO MANUAL
@@ -60,19 +53,10 @@ User Function M410STTS()
 		cMsg := "| TOTVS SFA: " + SC5->C5_X_PVSIM
     End
 
-	//Se for TOTVS CRM
-    If Alltrim(SC5->C5_ORIGEM) = 'MSGEAI' .And. !EMPTY(SC5->C5_NUMEXT)
-        lRet := .T.
-		lCRM := .T.
-		cMsg := "| TOTVS CRM: " + SC5->C5_NUMEXT
-    End
-
 	//CRIAÇÃO DO ORÇAMENTO CALL CENTER PARA PEDIDOS INCLUIDOS NA INTEGRAÇÃO DO ECOMMERCE
 	If _nOper == 3 .And. lRet
 
 		CONOUT("Pedido de Venda N. " + SC5->C5_NUM + cMsg)
-
-		//U_AFAT008(SC5->C5_NUM, lSFA)
 
 		Reclock("SC5",.F.)
 			SC5->C5_XSUA = "S"
@@ -95,18 +79,8 @@ User Function M410STTS()
 			U_AFAT015(SC5->C5_NUM)
 		End
 
-		If lMinimumValueLockout .And. SC5->C5_TIPO == 'N'
-
-			oMinimumValue := minimumValueControlInTheSalesOrder():New()
-			oMinimumValue:cBranch      := FWxFilial("SC6")
-			oMinimumValue:cOrderNumber := SC6->C6_NUM
-			oMinimumValue:Process()
-			
-		End
-
 	End
 
 	FreeObj(oRules)
-	FreeObj(oMinimumValue)
 
 Return Nil

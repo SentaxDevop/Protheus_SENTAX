@@ -13,29 +13,37 @@
 /*/
 User Function ATMK018(aPars)
 
-    Local cEnvUser  := "Administrador"
-    Local cEnvPass  := "S3nt@x2026"
-    Local cEnvMod   := "TMK"
-    Local cFunName  := "ATMK018"
-    Local aTables   :=  {"SUA", "SUB", "SUC", "SUD", "SB1", "SA1", "SUS", "SE4", "AC8", "SA4", "SU7"}
+    Local cEmp     := ""
+    Local cFil     := ""
+    Local cUsuario := ""
+    Local cPsw     := ""
 
-    Private cNumSUA := ""
+    DEFAULT aPars := {"01","020201"}
 
-	DEFAULT aPars   := {"01","020201"}
+    cEmp := aPars[1]
+    cFil := aPars[2]
 
-	RpcClearenv()
+    //1ª etapa: abre a empresa sem usuário apenas para ler os parâmetros
+    RpcSetType(3)
+    RpcSetEnv(cEmp, cFil)
 
-	RpcSetType( 3 )
-	RpcSetEnv( aPars[1], aPars[2], cEnvUser, cEnvPass, cEnvMod, cFunName, aTables)
-	//RpcSetEnv( aPars[1], aPars[2])
+    cUsuario := AllTrim(SuperGetMV("ST_JOBUSR", .F., ""))
+    cPsw     := AllTrim(Decode64(AllTrim(SuperGetMV("ST_JOBPSW", .F., ""))))
 
-    //Inclusão automática de SAC's
-    //ATMK018A()
+    RpcClearEnv()
 
-    //Inclusão automática de Atendimentos
-    ATMK018C()
+    If Empty(cUsuario) .Or. Empty(cPsw)
+        ConOut("ATMK018 - Parametros ST_JOBUSR/ST_JOBPSW nao configurados. Processo abortado.")
+        Return
+    EndIf
 
-	RpcClearEnv()
+    ConOut("ATMK018 - ANTES DO STARTJOB.")
+
+    //2ª etapa: processa em nova thread com o usuário do Call Center
+    //lWait = .T. para não sobrepor a próxima execução do schedule
+    StartJob("U_ATMK021", GetEnvServer(), .T., cEmp, cFil, cUsuario, cPsw)
+
+    ConOut("ATMK018 - DEPOIS DO STARTJOB.")
 
 Return
 
@@ -189,86 +197,5 @@ Static Function ATMK018B()
 
         Break
     Endif
-
-Return lRet
-
-/*/{Protheus.doc} ATMK018C
-    Realiza a inclusão do TeleAtendimento
-    @type function
-    @version 1.0
-    @author Alfred Andersen
-    @since 6/25/2025
-/*/
-Static Function ATMK018C()
-
-    Local cAliasSC5 := GetNextAlias()
-
-    Conout(" S T A R T - Inclusão automática de Atendimentos")
-
-    BeginSql Alias cAliasSC5
-                
-        SELECT 
-            R_E_C_N_O_ RECSC5
-        FROM 
-            %Table:SC5% SC5
-        WHERE SC5.%NOTDEL%
-            //AND C5_FILIAL = %xFilial:SC5%
-            AND C5_XSUA = "S"
-        ORDER BY
-            C5_FILIAL, C5_NUM
-    EndSql
-
-    If (cAliasSC5)->(!EOF())
-
-        While (cAliasSC5)->(!EOF())
-
-            SC5->(DBGOTO((cAliasSC5)->RECSC5))
-
-            cFilAnt := SC5->C5_FILIAL
-
-            If ATMK018D()
-
-                Conout("Atendimento do Pedido de Venda nº " + SC5->C5_NUM + " será incluído!")
-
-                U_AFAT008(SC5->C5_NUM, !EMPTY(SC5->C5_X_PVSIM), Alltrim(SC5->C5_ORIGEM) = 'MSGEAI' .And. !EMPTY(SC5->C5_NUMEXT))
-            
-            Else
-
-                Reclock("SC5",.F.)
-                    SC5->C5_XSUA = "D"
-                MsUnlock()
-
-            End
-
-            (cAliasSC5)->(DbSkip())
-        End
-
-    End
-
-    Conout(" F I N I S H - Rotina de Inclusão automática de Atendimentos finalizada")
-
-Return
-
-Static Function ATMK018D()
-
-    Local cAliasSUA := GetNextAlias()
-    Local lRet      := .T.
-
-    BeginSql Alias cAliasSUA
-                
-        SELECT 
-            SUA.*
-        FROM 
-            %Table:SUA% SUA
-        WHERE SUA.%NOTDEL%
-            AND UA_FILIAL = %Exp:SC5->C5_FILIAL%
-            AND UA_NUMSC5 = %Exp:SC5->C5_NUM%
-    EndSql
-
-    If (cAliasSUA)->(!EOF())
-
-        lRet := .F.
-
-    End
 
 Return lRet

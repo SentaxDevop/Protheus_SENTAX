@@ -1,0 +1,452 @@
+#INCLUDE "TOTVS.CH"
+#Include "TOPCONN.CH"
+#INCLUDE "TBICONN.CH"
+
+/*/{Protheus.doc} ATMK020
+    Gestor de Crédito e Regras dos Pedidos de Venda
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 10/31/2026
+/*/
+User Function ATMK020(cNumPedido)
+
+    Local aArea            := FWGetArea()                  as Array
+    Local nPedido          := 0                            as Numeric
+    Local nRecnoSC5        := 0                            as Numeric
+    Local cAlias1          := GetNextAlias()               as Character
+    Local cAlias2          := ""                           as Character
+    Local lBloqueioCredito := .F.                          as Logical
+    Local lLimiteCredito   := .F.                          as Logical
+    Local lContinue        := .T.                          as Logical
+    Local aPedidos         := {}                           as Array
+    Local aTitulos         := {}                           as Array
+    Local lAFAT008         := FWIsInCallStack("U_AFAT008") as Logical
+    Local cCliente         := ""                           as Character
+    Local cLoja            := ""                           as Character
+
+    //Garante a SC5 posicionada no pedido recebido
+    SC5->(DbSetOrder(1))
+    If !SC5->(DbSeek(xFilial("SC5") + cNumPedido))
+        FWLogMsg("ERROR", , "PEDIDO NAO ENCONTRADO NA FILIAL " + cFilAnt + ": " + cNumPedido, "ATMK020")
+        FWRestArea(aArea)
+        Return
+    EndIf
+
+    cCliente := SC5->C5_CLIENTE
+    cLoja    := SC5->C5_LOJACLI
+
+    Private cRazao    := Posicione("SA1",1,xFilial("SA1")+cCliente+cLoja,"A1_NOME")
+	Private cMot      := ""
+	Private dEmis     := SC5->C5_EMISSAO
+	Private cPed      := cNumPedido
+	Private nValAv    := 0
+
+    FWLogMsg("INFO", , "INCIO DAS ETAPAS DE VALIDACAO X BLOQUEIOS DO PEDIDO DE VENDA: " + cNumPedido, "ATMK020")
+
+    If lAFAT008
+        lContinue := ATMK020B(cPed)
+    End
+
+    If lContinue
+
+        If Select( cAlias1 ) <> 0
+            (cAlias1)->( dbCloseArea() )
+        EndIf
+
+        BeginSql Alias cAlias1
+
+            SELECT 
+                C6_ITEM, 
+                C6_PRODUTO
+            FROM 
+                %Table:SC6% SC6
+            INNER JOIN 
+                %Table:SF4% SF4 
+                ON F4_FILIAL    = SUBSTRING(C6_FILIAL,1,4) 
+                AND F4_CODIGO   = C6_TES 
+                AND SF4.%NotDel%
+            INNER JOIN 
+                %Table:SUB% SUB 
+                ON UB_FILIAL    = C6_FILIAL 
+                AND UB_NUMPV    = C6_NUM 
+                AND UB_ITEMPV   = C6_ITEM 
+                AND SUB.%NotDel% 
+            WHERE 
+                SC6.%NotDel%
+                AND C6_FILIAL = %xFilial:SC6%
+                AND C6_NUM = %Exp:cNumPedido%
+                AND (F4_BLQ = 'S' OR UB_BLQREG = 'S')
+            GROUP BY 
+                C6_ITEM, 
+                C6_PRODUTO
+
+        EndSql
+
+        //Se houver bloqueios de regra para o pedido de venda
+        If (cAlias1)->(!EOF())
+            
+            Count To nPedido
+
+        End
+
+        (cAlias1)->( dbCloseArea() )
+
+        //Grava bloqueio nos itens do pedido de vendas por regra
+        If nPedido > 0
+
+            cAlias2 := GetNextAlias()
+
+            If Select( cAlias2 ) <> 0
+                (cAlias2)->( dbCloseArea() )
+            EndIf
+
+            BeginSql Alias cAlias2
+
+                //Consulta Registros a serem bloqueados
+                SELECT 
+                    SC5.R_E_C_N_O_ RECSC5, 
+                    SC6.R_E_C_N_O_ RECSC6
+                FROM 
+                    %Table:SC5% SC5
+                INNER JOIN 
+                    %Table:SC6% SC6 
+                    ON C6_FILIAL = C5_FILIAL 
+                    AND C5_NUM = C6_NUM 
+                    AND SC6.%NotDel%
+                WHERE 
+                    SC5.%NotDel%
+                    AND C5_FILIAL = %xFilial:SC5%
+                    AND C5_NUM = %Exp:cNumPedido%
+
+            EndSql
+
+            While (cAlias2)->(!EOF())
+
+                nRecnoSC5 := (cAlias2)->RECSC5
+
+                SC6->(DbGoTo((cAlias2)->RECSC6))
+
+                //Bloqueio da SC6
+                Begin Transaction
+                    If RecLock("SC6")
+                        SC6->C6_BLOQUEI := "01"
+                        MsUnLock("SC6")
+                    Endif
+                End Transaction
+
+                (cAlias2)->(DbSkip())
+            End
+
+            (cAlias2)->( dbCloseArea() )
+
+            If !(nRecnoSC5 == 0)
+
+                SC5->(DbGoTo(nRecnoSC5))
+
+                //Bloqueio da SC5
+                Begin Transaction
+                    If RecLock("SC5")
+                        SC5->C5_BLQ := "1"
+                        MsUnLock("SC5")
+                    Endif
+                End Transaction
+
+                //Envia e-mail se houver bloqueio por regras
+                If GETMV("MV_USAROT") == "S"
+
+                    FWLogMsg("INFO", , "BLOQUEIO POR REGRAS ", "ATMK020")
+                
+                    ATMK020A(cNumPedido)
+                
+                    cMot := Alltrim(cNumPedido) + " - BLOQUEIO REGRAS"
+
+                    MAILPED()
+
+                Endif
+
+            End
+
+            lContinue := .F.
+
+        End
+
+    End
+
+    If lContinue
+
+        //Validação do valor mínimo do pedido de venda
+        If U_AFAT018( cNumPedido)
+
+            FWLogMsg("INFO", , "BLOQUEIO POR VALOR PEDIDO MINIMO ", "ATMK020")
+
+            lContinue := .F.
+
+            ATMK020A(cNumPedido)
+
+            cMot := Alltrim(cNumPedido) + " - BLOQUEIO VALOR PEDIDO MINIMO"
+            
+            MAILPED()
+        END
+
+    End
+
+    //Libera o pedido de vendas e efetua reserva do estoque se não existir bloqueio por regra
+    If nPedido == 0 .And. lContinue
+
+        dbSelectArea("SC6")
+        SC6->(dbSetOrder(1))
+        SC6->(dbSeek(xFilial("SC6")+cNumPedido,.T.))
+
+       FWLogMsg("INFO", , "PROCESSAMENTO DA LIBERACAO DO PEDIDO. (SC9) ", "ATMK020")
+
+        While SC6->(!Eof()) .and. SC6->C6_FILIAL == xFilial("SC6") .and. SC6->C6_NUM == cNumPedido
+            Begin Transaction
+            
+                If Empty(aPedidos)
+                    AADD(aPedidos, cNumPedido)
+                Endif
+                
+                MaLibDoFat(SC6->(Recno()),SC6->C6_QTDVEN,.T.,.T.,.T.,.T.,.F.,.T.,,)
+                
+            End Transaction
+
+            SC6->(dbSkip())
+        Enddo
+
+        //Consulta os títulos vencidos do cliente 
+        aTitulos       := U_AFIN006(cCliente, cLoja)
+
+        //Consulta limite de crédito (.T. - Com Limite / .F. - Sem Limite)
+        lLimiteCredito := U_AFIN007(cCliente, cLoja, cNumPedido)
+
+        //Processa o bloqueio do faturamento por falta de crédito
+        If Len(aTitulos) > 0 .Or. !lLimiteCredito
+
+            lBloqueioCredito := .T. 
+        
+            //Chama a função de bloqueio
+            If U_AFAT017(cNumPedido, If(!lLimiteCredito,"04","01"))
+
+                //Zera o array para não forçar a liberação que ocorre logo abaixo
+                aPedidos := {}
+
+            End
+
+        End
+        
+        IF lBloqueioCredito 
+            
+            //Envia e-mail se houver bloqueio por crédito
+            If GETMV("MV_USAROT") == "S"
+
+                FWLogMsg("INFO", , "BLOQUEIO POR CREDITO ", "ATMK020")
+
+                ATMK020A(cNumPedido)
+
+                cMot := Alltrim(cNumPedido) + " - BLOQUEIO DE CREDITO"
+
+                MAILPED()
+
+            End
+
+            lContinue := .F.
+
+        ENDIF
+        
+    ENDIF
+
+    //Grava liberação do pedido de vendas
+    If lContinue
+
+        FWLogMsg("INFO", , "LIBERACAO DO PEDIDO ", "ATMK020")
+
+        Begin Transaction
+            SC5->(MaLiberOk({cNumPedido},.F.))
+        End Transaction
+
+    Endif 
+
+    FWLogMsg("INFO", , "FIM DO FLUXO. PEDIDO DE VENDA: " + cNumPedido, "ATMK020")
+
+    FWRestArea(aArea)
+
+Return
+
+//------------------------------------------
+//Envio de e-mail sobre o bloqueio do pedido
+//------------------------------------------
+Static Function MAILPED()
+
+    Local nTentativa := 0
+    Local nMaxTent   := 3
+    Local lConectou  := .F.
+    Local lSendOk    := .F.
+    Local cError     := ""
+
+    Private cServer    := GETMV("MV_RELSERV")
+    Private cAccount   := GETMV("MV_RELACNT")
+    Private cPassword  := GETMV("MV_RELPSW")
+    Private lAutentica := GETMV("MV_RELAUTH")
+    Private cMail      := GETMV("MV_MAILPED")
+    Private cInforma   := Alltrim(cUserName)+" - "+Time()
+    Private cAssunto   := cMot
+    Private cEnvia     := cAccount
+    Private cBody      := ""
+    Private cQbra      := "<BR>"
+
+    cBody += '<table class=p11preto border=1 cellpadding=1 cellspacing=2 width="100%" bordercolor="#111111"> '
+    cBody += '<tr> '
+    cBody += '<td bgColor=#e4dfe0 style="font-size:10.0pt;mso-bidi-font-size:10.0pt font-family:Tahoma"> <FONT face=Tahoma> <p align="center"> <b>ATENÇÃO - PEDIDO DE VENDAS BLOQUEADO</b> </td>'
+    cBody += '</tr> '
+    cBody += '</table>'
+
+    cBody += '<table class=p11preto border=1 cellpadding=1 cellspacing=2 width="100%" bordercolor="#111111"> '
+    cBody += '<tr> '
+    cBody += '<td bgColor=#e4dfe0 style="font-size:10.0pt;mso-bidi-font-size:10.0pt font-family:Tahoma"> <FONT face=Tahoma> <p align="center"> <b>FILIAL</b> </td>'
+    cBody += '<td bgColor=#e4dfe0 style="font-size:10.0pt;mso-bidi-font-size:10.0pt font-family:Tahoma"> <FONT face=Tahoma> <p align="center"> <b>PEDIDO</b> </td>'
+    cBody += '<td bgColor=#e4dfe0 style="font-size:10.0pt;mso-bidi-font-size:10.0pt font-family:Tahoma"> <FONT face=Tahoma> <p align="center"> <b>CLIENTE</b> </td>'
+    cBody += '<td bgColor=#e4dfe0 style="font-size:10.0pt;mso-bidi-font-size:10.0pt font-family:Tahoma"> <FONT face=Tahoma> <p align="center"> <b>EMISSÃO</b> </td>'
+    cBody += '<td bgColor=#e4dfe0 style="font-size:10.0pt;mso-bidi-font-size:10.0pt font-family:Tahoma"> <FONT face=Tahoma> <p align="center"> <b>VALOR</b> </td>'
+
+    cBody += '</tr> '
+    cBody += '<tr>'
+    cBody += '<td style="font-size:10.0pt;mso-bidi-font-size:10.0pt font-family:Tahoma"> <FONT face=Tahoma> <p align="center">' + xFilial("SC5") + '</td>'
+    cBody += '<td style="font-size:10.0pt;mso-bidi-font-size:10.0pt font-family:Tahoma"> <FONT face=Tahoma> <p align="center">' + cPed + '</td>'
+    cBody += '<td style="font-size:10.0pt;mso-bidi-font-size:10.0pt font-family:Tahoma"> <FONT face=Tahoma> <p align="center">' + cRazao + '</td>'
+    cBody += '<td style="font-size:10.0pt;mso-bidi-font-size:10.0pt font-family:Tahoma"> <FONT face=Tahoma> <p align="center">' + dtoc(dEmis) + '</td>'
+    cBody += '<td style="font-size:10.0pt;mso-bidi-font-size:10.0pt font-family:Tahoma"> <FONT face=Tahoma> <p align="center">' + Transform(nValAv,"@E 999,999,999.99") + '</td>'
+
+
+    cBody += '</tr>'
+    cBody += '</table>'
+
+    cBody += cQbra
+
+    cBody += '<table class=p11preto border=1 cellpadding=1 cellspacing=2 width="100%" bordercolor="#111111"> '
+    cBody += '<tr> '
+    cBody += '<td bgColor=#e4dfe0 style="font-size:10.0pt;mso-bidi-font-size:10.0pt font-family:Tahoma"> <FONT face=Tahoma> <p align="center"> <b>USUÁRIO</b> </td>'
+    cBody += '</tr> '
+    cBody += '<tr>'
+    cBody += '<td style="font-size:10.0pt;mso-bidi-font-size:10.0pt font-family:Tahoma"> <FONT face=Tahoma> <p align="center">'+ cInforma + '</td>'
+    cBody += '</tr>'
+    cBody += '</table>'
+
+    For nTentativa := 1 To nMaxTent
+
+        CONNECT SMTP SERVER cServer ACCOUNT cAccount PASSWORD cPassword RESULT lConectou
+
+        If lConectou
+            Exit
+        EndIf
+
+        FWLogMsg("WARN", , "FALHA CONEXAO SMTP - TENTATIVA " + cValToChar(nTentativa) + "/" + cValToChar(nMaxTent), "ATMK020")
+        Sleep(2000)
+
+    Next nTentativa
+
+    If !lConectou
+        GET MAIL ERROR cError
+        FWLogMsg("ERROR", , "E-MAIL DE BLOQUEIO NAO ENVIADO. PEDIDO: " + cPed + " - " + cError, "ATMK020")
+        Return .F.
+    EndIf
+
+    If lAutentica
+        MailAuth(cAccount, cPassword)
+    EndIf
+
+    SEND MAIL FROM cEnvia TO cMail SUBJECT cAssunto BODY cBody RESULT lSendOk
+
+    If !lSendOk
+        GET MAIL ERROR cError
+        FWLogMsg("ERROR", , "FALHA NO ENVIO DO E-MAIL. PEDIDO: " + cPed + " - " + cError, "ATMK020")
+    EndIf
+
+    DISCONNECT SMTP SERVER
+
+Return lSendOk
+
+//-----------------------------
+//Verifica erro na conexão SMTP
+//-----------------------------
+Static Function MostraErro()
+
+    Get MAIL ERROR cError
+    qOut(cError + "-Erro")
+
+Return
+
+Static Function ATMK020A(cNumPedido)
+
+    Local cAliasA := GetNextAlias() as Character
+
+    BeginSql Alias cAliasA
+        SELECT	
+            SUM((C6_PRCVEN * C6_QTDVEN)) TOTAL 
+        FROM	
+            %Table:SC6% SC6
+        WHERE
+            SC6.%NotDel%
+            AND C6_FILIAL = %xFilial:SC6%	
+            AND C6_NUM    = %Exp:cNumPedido%
+    EndSql
+    
+    nValAv := (cAliasA)->TOTAL
+    
+    (cAliasA)->(DbCloseArea())
+
+Return
+
+/*/{Protheus.doc} ATMK020B
+    Consulta se o pedido de venda já está bloqueado por Regra ou pela SC9 devido as validações padrões do MATA410
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 10/31/2026
+    @return lRet, .T. - Desbloqueado /.F. - Bloqueado
+/*/
+Static Function ATMK020B(cNumeroPedido)
+
+    Local lRet       := .T.            as Logical
+    Local cAlias020B := GetNextAlias() as Character
+
+    If Select( cAlias020B ) <> 0
+		(cAlias020B)->( dbCloseArea() )
+	EndIf
+
+    BeginSql Alias cAlias020B
+
+        SELECT 
+            C5_BLQ, 
+            ISNULL(C9_BLCRED,'') C9_BLCRED, 
+            ISNULL(C9_BLEST,'') C9_BLEST
+        FROM 
+            %Table:SC5% SC5
+        LEFT JOIN 
+            %Table:SC9% SC9
+            ON C9_FILIAL = C5_FILIAL
+            AND C9_PEDIDO = C5_NUM
+            AND SC9.%NotDel%
+        WHERE 
+            SC5.%NotDel%
+            AND C5_FILIAL = %xFilial:SC5%
+            AND C5_NUM = %Exp:cNumeroPedido%
+
+    EndSql
+
+
+    While (cAlias020B)->(!EOF()) .And. lRet
+
+        If !Empty((cAlias020B)->C5_BLQ) .Or. !Empty((cAlias020B)->C9_BLCRED) .Or. !Empty((cAlias020B)->C9_BLEST)
+
+            FWLogMsg("INFO", , "PEDIDO COM BLOQUEIOS PREVIOS VIA MATA410, NADA SERA REALIZADO", "ATMK020B")
+
+            lRet := .F.
+        End
+
+        (cAlias020B)->(DbSkip())
+    End
+
+    (cAlias020B)->(DbCloseArea())
+
+Return lRet 

@@ -1,0 +1,31 @@
+#INCLUDE "TOTVS.CH"
+
+
+/*/{Protheus.doc} AFAT018
+    Função centralizadora de validação do valor mínimo do pedido de venda x bloqueio
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 10/25/2026
+/*/
+User Function AFAT018(cPedido)
+
+    Local aArea         := FwGetArea() as Array
+    Local lRet          := .F.         as Logical
+    Local lMinimumValue := .F.         as Logical
+    Local oMinimumValue                as Object
+
+    lMinimumValue := GetNewPar("ST_FAT18A",.T.) 
+
+    If lMinimumValue .And. SC5->C5_TIPO == 'N'
+
+        oMinimumValue := minimumValueControlInTheSalesOrder():New()
+        oMinimumValue:cBranch      := FWxFilial("SC6")
+        oMinimumValue:cOrderNumber := cPedido
+        lRet := oMinimumValue:Process()
+        
+    End
+
+  FwRestArea( aArea)
+
+Return lRet

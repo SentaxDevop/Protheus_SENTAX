@@ -12,7 +12,7 @@
 	@author Alfred Andersen
 	@since 17/08/2023
 /*/
-User Function AFAT008(cNumSC5, _lSFA, _lCRM)
+User Function AFAT008(cNumSC5, _lSFA)
 
 	Local aArea     as Array
 	Local cRotina   as Character
@@ -20,14 +20,12 @@ User Function AFAT008(cNumSC5, _lSFA, _lCRM)
 
 	Private _cNumPv as Character
 	Private lSFA    as Logical
-	Private lCRM    as Logical
 
 	aArea   := GetArea()
 	cRotina := "2" //Indica as rotinas de atendimento. 1-Telemarketing 2- Televendas 3-Telecobrança
 	oObjeto := TIntegracaoProtheusxWMSCyberlog():New()
 	_cNumPv := cNumSC5
 	lSFA    := _lSFA
-	lCRM    := _lCRM
 
 	//Execauto da rotina TmkA271
 	SUA->(DbSetOrder(8))
@@ -72,7 +70,7 @@ Static Function MyTmkA271(cRotina)
 	Local nDespesa   := 0
 	Local cCondPag   := ""
 	Local cTransp    := ""
-	Local cOperador  := GETNEWPAR("ST_OPERAD","000001") //GETNEWPAR("ST_OPERAD","000229")
+	Local cOperador  := GETNEWPAR("ST_OPERAD","000354") //GETNEWPAR("ST_OPERAD","000229")
 	Local cTabela    := ""
 	Local cVend1     := ""
 	Local cVend2     := ""
@@ -84,8 +82,6 @@ Static Function MyTmkA271(cRotina)
 	Local cMail      := ""
 	Local cAssunto   := ""
 	Local nI         := 0
-
-
 
 	DEFAULT cRotina     := "2"  //Indica as rotinas de atendimento. 1-Telemarketing 2- Televendas 3-Telecobrança
 
@@ -120,7 +116,7 @@ Static Function MyTmkA271(cRotina)
 	cVend1      := Alltrim(SC5->C5_VEND1)
 	cVend2      := Alltrim(SC5->C5_VEND2)
 
-	If (lSFA .Or. lCRM ) .And. Empty(cVend2)
+	If (lSFA ) .And. Empty(cVend2)
 
 		cAliasSU7 := GetNextAlias()
 
@@ -153,7 +149,7 @@ Static Function MyTmkA271(cRotina)
 	AADD(aCabec,{ "UA_VEND"      , cVend1         , Nil })
 	AADD(aCabec,{ "UA_TABELA"    , cTabela        , Nil })
 
-	If lSFA .Or. lCRM
+	If lSFA
 		AADD(aCabec,{ "UA_OPER"      , "1"            , Nil })  // 1-Faturamento 2-Orcamento 3-Atendimento
 	Else
 		AADD(aCabec,{ "UA_OPER"      , "2"            , Nil })  // 1-Faturamento 2-Orcamento 3-Atendimento
@@ -166,7 +162,7 @@ Static Function MyTmkA271(cRotina)
 	
 	If cVend1 == "510" //"E-COMMERCE"
 		AADD(aCabec,{ "UA_TMK"       , "S"            , Nil })  // 1=Receptivo;2=Ativo;3=Acom;4=Rep;5=Ret. Ativo;6=Cotacao;7=O.S;8=E-mail;9=WhatsApp;S=Site;G=Google;U=Up;N=Nao Atend;R=Rds;M=Mkt 
-	ElseIf lSFA .Or. lCRM
+	ElseIf lSFA
 	 	AADD(aCabec,{ "UA_TMK"       , "S"            , Nil })  // 1=Receptivo;2=Ativo;3=Acom;4=Rep;5=Ret. Ativo;6=Cotacao;7=O.S;8=E-mail;9=WhatsApp;S=Site;G=Google;U=Up;N=Nao Atend;R=Rds;M=Mkt 
 	Else
 		AADD(aCabec,{ "UA_TMK"       , "M"            , Nil })  // 1=Receptivo;2=Ativo;3=Acom;4=Rep;5=Ret. Ativo;6=Cotacao;7=O.S;8=E-mail;9=WhatsApp;S=Site;G=Google;U=Up;N=Nao Atend;R=Rds;M=Mkt  
@@ -206,7 +202,7 @@ Static Function MyTmkA271(cRotina)
 			aadd(aLinha,{"UB_TES"       , Alltrim(SC6->C6_TES)     	, Nil})
 
 			//TOTVS SFA
-			If lSFA .Or. lCRM
+			If lSFA
 
 				//Pedidos gerados pelo SFA de Remessa de Comodato, deve ser bloqueados por Regra
 				If SC6->C6_OPER == "02"
@@ -229,15 +225,9 @@ Static Function MyTmkA271(cRotina)
 
 					conout("BLOQUEIO DE REGRA")
 
-					Reclock("SC6",.F.)
-						SC6->C6_BLOQUEI := "01"
-					MsUnLock()
-
-					RecLock("SC5",.F.)
-						SC5->C5_BLQ := "1"
-					MsUnLock()
 				End
 			End
+
 			aadd(aItens,aLinha)
 
 			SC6->(DbSkip())
@@ -246,8 +236,6 @@ Static Function MyTmkA271(cRotina)
 
 
 	If Len(aItens) > 0
-		
-		//DbSelectArea("CLI")
 
 		//ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ¿
 		//| Executa a chamada da rotina de atendimento CALL CENTER       |
@@ -269,9 +257,9 @@ Static Function MyTmkA271(cRotina)
 				Conout("Atendimento Recno --> " + cValtoChar( SUA->(RECNO() ))  + " - Pedido --> " + _cNumPv)
 
 				If RecLock("SUA",.F.)
-					SUA->UA_OPER 	:= "1"
-					SUA->UA_STATUS 	:= "LIB"
-					SUA->UA_NUMSC5	:= _cNumPv
+					SUA->UA_OPER   := "1"
+					SUA->UA_STATUS := "LIB"
+					SUA->UA_NUMSC5 := _cNumPv
 					SUA->(MsUnLock())
 				Endif
 
@@ -280,8 +268,8 @@ Static Function MyTmkA271(cRotina)
 					SUB->(DbSetOrder(1)) //UB_FILIAL+UB_NUM+UB_ITEM+UB_PRODUTO
 					If SUB->(DbSeek(SUA->(UA_FILIAL + UA_NUM) + aItens[nCount,1,2]))
 						If RecLock("SUB",.F.)
-							SUB->UB_NUMPV 	:= _cNumPv
-							SUB->UB_ITEMPV 	:= aItens[nCount,1,2]
+							SUB->UB_NUMPV  := _cNumPv
+							SUB->UB_ITEMPV := aItens[nCount,1,2]
 							SUB->(MsUnLock())
 						Endif
 					EndIf
@@ -289,16 +277,12 @@ Static Function MyTmkA271(cRotina)
 
 			EndIf
 
-			//Grava liberação do pedido de vendas
-			If lSFA .And. SC5->C5_BLQ <> "1"
-				Begin Transaction
-				SC5->(MaLiberOk({C5_NUM},.F.))
-				End Transaction
-			Endif 
-
 			Reclock("SC5",.F.)
                 SC5->C5_XSUA = "I"
             MsUnlock()
+
+			//Validação dos Créditos e Regras para o PV
+			U_ATMK020(_cNumPv)
 
 		Else
 			Conout("")

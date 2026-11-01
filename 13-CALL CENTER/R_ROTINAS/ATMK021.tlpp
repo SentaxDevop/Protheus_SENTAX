@@ -1,0 +1,115 @@
+#INCLUDE 'Protheus.ch'
+#INCLUDE "TBICONN.CH"
+#include "topconn.ch"
+#Include "Fileio.ch"
+#Include "TOTVS.ch"
+
+
+/*/{Protheus.doc} ATMK021
+    Recebe a chamada do Schedule (ATMK018) para a geração do Atendimento no Call Center
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 11/1/2026
+/*/
+User Function ATMK021(cEmp, cFil, cUsuario, cPsw)
+
+    Local aTables := {"SUA", "SUB", "SUC", "SUD", "SB1", "SA1", "SUS", "SE4", "AC8", "SA4", "SU7"}
+
+    RpcSetType(3)
+
+    If !RpcSetEnv(cEmp, cFil, cUsuario, cPsw, "TMK", "ATMK021", aTables)
+        ConOut("ATMK021 - Falha na abertura do ambiente com o usuario: " + cUsuario)
+        Return
+    EndIf
+
+    ATMK021A()
+
+    RpcClearEnv()
+
+Return
+
+Static Function ATMK021A()
+
+    Local cAliasSC5 := GetNextAlias()
+
+    Conout(" S T A R T - Inclusão automática de Atendimentos")
+
+    BeginSql Alias cAliasSC5
+                
+        SELECT 
+            R_E_C_N_O_ RECSC5
+        FROM 
+            %Table:SC5% SC5
+        WHERE SC5.%NOTDEL%
+            //AND C5_FILIAL = %xFilial:SC5%
+            AND C5_XSUA = "S"
+        ORDER BY
+            C5_FILIAL, C5_NUM
+    EndSql
+
+    If (cAliasSC5)->(!EOF())
+
+        While (cAliasSC5)->(!EOF())
+
+            SC5->(DBGOTO((cAliasSC5)->RECSC5))
+
+            //Posiciona a filial do pedido (variável e SM0)
+            cFilAnt := SC5->C5_FILIAL
+
+            SM0->(DbSetOrder(1))
+            SM0->(DbSeek(cEmpAnt + cFilAnt))
+
+            If ATMK021B()
+
+                Conout("Atendimento do Pedido de Venda nº " + SC5->C5_NUM + " será incluído!")
+
+                U_AFAT008(SC5->C5_NUM, !EMPTY(SC5->C5_X_PVSIM))
+            
+            Else
+
+                Reclock("SC5",.F.)
+                    SC5->C5_XSUA = "D"
+                MsUnlock()
+
+            End
+
+            (cAliasSC5)->(DbSkip())
+        End
+
+    End
+
+    (cAliasSC5)->(DbCloseArea())
+
+    Conout(" F I N I S H - Rotina de Inclusão automática de Atendimentos finalizada")
+
+Return
+
+/*/{Protheus.doc} ATMK021B
+    Verificação do pedido de venda já replicado
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 10/31/2026
+/*/
+Static Function ATMK021B()
+
+    Local cAliasSUA := GetNextAlias()
+    Local lRet      := .T.
+
+    BeginSql Alias cAliasSUA
+        SELECT 
+            TOP 1 R_E_C_N_O_ RECSUA
+        FROM 
+            %Table:SUA% SUA
+        WHERE 
+            SUA.%NOTDEL%
+            AND UA_FILIAL = %Exp:SC5->C5_FILIAL%
+            AND UA_NUMSC5 = %Exp:SC5->C5_NUM%
+    EndSql
+
+    lRet := (cAliasSUA)->(EOF())
+
+    (cAliasSUA)->(DbCloseArea())
+
+Return lRet

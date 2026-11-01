@@ -1,0 +1,113 @@
+#INCLUDE "TOTVS.CH"
+
+
+/*/{Protheus.doc} AFIN007
+    Validação de Limite de Crédito
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 10/25/2026
+    /*/
+User Function AFIN007(cCustomer, cStore, cNumPedido)
+
+    Local lCredito      as Logical
+    Local aArea         as Array
+    Local cAlias        as Character
+    Local cAlias2       as Character
+    Local dVencLimite   as Date
+    Local nValorLimite  as Numeric
+    Local nSaldoCredito as Numeric
+    
+    lCredito := .T.
+    aArea    := FwGetArea() 
+    cAlias   := GetNextAlias() 
+
+    If Select( cAlias ) <> 0
+		(cAlias)->( dbCloseArea() )
+	EndIf
+
+    BeginSql Alias cAlias
+
+        SELECT 
+            SUM(E1_SALDO) TOTAL_SE1
+        FROM 
+            %Table:SE1% SE1
+        WHERE 
+            SE1.%NotDel%
+            AND E1_SALDO > 0
+            AND E1_CLIENTE = %Exp:cCustomer%
+            AND E1_LOJA = %Exp:cStore%
+            AND E1_TIPO NOT IN ("RA")
+
+    EndSql
+
+    If (cAlias)->(!EOF())   
+
+        SA1->(DbSetOrder(1))
+        SA1->(DbSeek(FWxFilial("SA1") + cCustomer + cStore))
+
+        dVencLimite   := SA1->A1_VENCLC
+        nValorLimite  := SA1->A1_LC + SA1->A1_LCFIN //Limite de Crédito + Limite de Crédito Secundário 
+        nSaldoCredito := nValorLimite - (cAlias)->TOTAL_SE1
+
+        //Limite de Crédito Vencido 
+        lCredito := dVencLimite > dDatabase
+
+        If !lCredito
+            FWLogMsg("INFO", , "LIMITE DE CREDITO VENCIDO", "AFIN007")
+        End
+
+        //Limite de Crédito Ultrapassado 
+        If lCredito .And. nSaldoCredito < 0
+
+            FWLogMsg("INFO", , "LIMITE DE CREDITO INSUFICIENTE", "AFIN007")
+
+            lCredito := .F.
+
+        End
+
+        //Limite de Crédito Insuficiente
+        If lCredito 
+
+            cAlias2 := GetNextAlias() 
+            
+            BeginSql Alias cAlias2
+                SELECT	
+                    SUM((C6_PRCVEN * C6_QTDVEN)) TOTAL_PEDIDO 
+                FROM	
+                    %Table:SC6% SC6
+                INNER JOIN 
+                    %Table:SF4% SF4 
+                    ON F4_FILIAL = SUBSTRING(C6_FILIAL,1,4)
+                    AND F4_CODIGO = C6_TES 
+                    AND F4_DUPLIC = 'S' 
+                    AND SF4.%NotDel%
+                WHERE	
+                    SC6.%NotDel%
+                    AND C6_FILIAL = %xFilial:SC6%	
+                    AND C6_NUM    = %Exp:cNumPedido%
+            EndSql
+            
+            If !(cAlias2)->( EOF() )
+
+                If (cAlias2)->TOTAL_PEDIDO > nSaldoCredito
+
+                    FWLogMsg("INFO", , "VALOR RESIDUAL DO LIMITE DE CREDITO INSUFICIENTE X VALOR DO PEDIDO", "AFIN007")
+
+                    lCredito := .F.
+
+                End
+
+            End
+
+            (cAlias2)->( dbCloseArea() )
+
+        End
+
+    End
+
+    (cAlias)->(DbCloseArea())
+
+    FWRestArea(aArea)
+
+Return lCredito

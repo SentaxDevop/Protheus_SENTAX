@@ -1,0 +1,42 @@
+#INCLUDE "TOTVS.CH"
+
+
+/*/{Protheus.doc} AFAT017
+    Função centralizadora de bloqueio do Pedido de Venda por crédito
+    @type function
+    @version 1.0
+    @author Alfred Andersen
+    @since 10/25/2026
+/*/
+User Function AFAT017(cPedido, cBloqueio)
+
+    Local aArea     := FwGetArea() as Array
+    Local lRet      := .F.         as Logical
+    Local cMensagem := ""          as Character
+
+    cMensagem := "["+cBloqueio+"]" + "Bloqueio de Crédito do Pedido: " + Alltrim(cPedido)
+
+    dbSelectArea("SC9")
+    SC9->(dbSetOrder(1))
+    SC9->(DbSeek(FWxFilial("SC9")+cPedido))
+
+    While ( !Eof() .And. FWxFilial("SC9") == SC9->C9_FILIAL .And. cPedido == SC9->C9_PEDIDO )
+
+        Begin Transaction
+        
+            Reclock("SC9",.F.)
+                SC9->C9_BLCRED := cBloqueio
+            SC9->(MsUnlock())
+
+		End Transaction
+
+        FWLogMsg("INFO", , "AFAT017", cMensagem + "/Item: " +  SC9->C9_ITEM)
+
+        lRet := .T.
+
+		SC9->(dbSkip())
+    EndDo
+
+    FwRestArea( aArea)
+
+Return lRet
