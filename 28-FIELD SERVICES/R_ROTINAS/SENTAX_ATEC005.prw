@@ -61,7 +61,11 @@ End
 
 // Se não houver dados no vetor, avisar usuário e sair rotina
 If Len(aLista) == 0
-	MsgAlert("Não existem dados a consultar!", cTitulo)
+
+	If !FWIsInCallStack("U_ATMK017")
+		MsgAlert("Não existem dados a consultar!", cTitulo)
+	End
+
 	lREt := .T.
 	Return lRet
 EndIf

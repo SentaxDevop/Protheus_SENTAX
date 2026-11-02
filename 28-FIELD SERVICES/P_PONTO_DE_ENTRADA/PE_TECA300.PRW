@@ -67,8 +67,7 @@ Esse ponto de entrada é chamado após o término da gravação do atendimento (chama
 /*/ 
 //-------------------------------------------------------------------
 User Function AT300GRV()
-
-	Local lAltSts := .F.   
+  
 	Local cStatus := "" 
 	Local cDescProb := ""
 
