@@ -29,7 +29,7 @@ User Function M410STTS()
 	lNot5And7            := (_nOper <> 5 .And. _nOper <> 7)
 	cMsg                 := ""
 	lRules               := GetNewPar("ST_RULE",.F.)
-	lCommission          := .F. //Regra bloqueada até a homologação das regras do projeto //_nOper <> 5 .And. _nOper <> 7 .And. !Empty(SC5->C5_TABELA)
+	lCommission          := GetNewPar("ST_COMISSA",.T.)
 	oRules               := TSalesOrderBlockingByRules():New()
 
 	//DESABILITADO VALIDAÇÃO FUNNAME PARA REALIZAÇÃO DO TESTE NA INCLUSÃO DO PEDIDO MANUAL
