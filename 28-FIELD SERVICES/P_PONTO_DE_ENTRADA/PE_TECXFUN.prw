@@ -113,8 +113,9 @@ Local dDataEnc := CtoD("//")
 Local cHoraEnc := ""
 Local cEstOs   := ""
 Local cMunOs   := ""
+Local lOSTMK   := FWIsInCallStack("U_ATMK017")
 
-If FunName() == "TECA300" // Se foi chamado pela efetivação do atendimento em OS
+If FunName() == "TECA300" .Or. lOSTMK// Se foi chamado pela efetivação do atendimento em OS
     
 	DbSelectArea("AB2")
 	AB2->(DbSetOrder(1)) // AB2_FILIAL+AB2_NRCHAM+AB2_ITEM+AB2_CODPRO+AB2_NUMSER    
@@ -136,7 +137,7 @@ If FunName() == "TECA300" // Se foi chamado pela efetivação do atendimento em OS
 		
 	EndIf 
 
-	If INCLUI
+	If INCLUI .Or. lOSTMK
         		
 		If AB1->AB1_XCDEND == "000"        
 		
@@ -161,7 +162,7 @@ If FunName() == "TECA300" // Se foi chamado pela efetivação do atendimento em OS
 			EndIf
 		AB6->(MsUnLock())
 	
-	ElseIf ALTERA .AND. !Empty(cClasAB2)
+	ElseIf ALTERA .AND. !Empty(cClasAB2) .And. !lOSTMK
 	
 		RecLock("AB6",.F.)
 	   		AB6->AB6_XCLASS := cClasAB2	

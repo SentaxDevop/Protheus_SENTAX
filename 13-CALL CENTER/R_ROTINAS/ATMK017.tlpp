@@ -91,14 +91,16 @@ User Function ATMK017(nOpc)
 
 		TECA300("At300Inclu",aChamado)
 
-		If ATMK017C(SUA->UA_CLIENTE, SUA->UA_LOJA)
-			ATMK017A(AB1->AB1_NRCHAM)
-		Else
-			If !Empty(AB1->AB1_NRCHAM)
-				FWAlertSuccess("Registro incluído com sucesso! Nº " + Alltrim(AB1->AB1_NRCHAM), "Chamado Técnico")
+		If AB1->AB1_NRCHAM 	<> "00000001
+			If ATMK017C(SUA->UA_CLIENTE, SUA->UA_LOJA)
+				ATMK017A(AB1->AB1_NRCHAM)
+			Else
+				If !Empty(AB1->AB1_NRCHAM)
+					FWAlertSuccess("Registro incluído com sucesso! Nº " + Alltrim(AB1->AB1_NRCHAM), "Chamado Técnico")
+				End
 			End
 		End
-
+		
 	End
 
 Return
