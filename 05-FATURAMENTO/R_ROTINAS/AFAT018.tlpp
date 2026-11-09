@@ -13,11 +13,13 @@ User Function AFAT018(cPedido)
     Local aArea         := FwGetArea() as Array
     Local lRet          := .F.         as Logical
     Local lMinimumValue := .F.         as Logical
+    Local lEcommerce    := .F.         as Logical
     Local oMinimumValue                as Object
 
-    lMinimumValue := GetNewPar("ST_FAT18A",.T.) 
+    lMinimumValue := GetNewPar("ST_FAT18A",.T.)
+    lEcommerce    := !EMPTY(SC5->C5_X_PVSIM) .Or. SC5->C5_VEND1 == '510' //SFA ou Vtrina
 
-    If lMinimumValue .And. SC5->C5_TIPO == 'N'
+    If lMinimumValue .And. !lEcommerce .And. SC5->C5_TIPO == 'N'
 
         oMinimumValue := minimumValueControlInTheSalesOrder():New()
         oMinimumValue:cBranch      := FWxFilial("SC6")
